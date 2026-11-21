@@ -30,10 +30,10 @@
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `name` | string | `미국주식` `한국주식` `채권` `머니마켓` `금` `원자재` `부동산` `코인` `달러` (9종 고정 순서) |
-| `flow_label` | string | `순유입` / `순유출` (UI가 색·막대 방향 결정) |
+| `name` | string | `미국주식` `한국주식` `채권` `머니마켓` `금` `원자재` `부동산` `코인(비트코인·이더리움)` `달러` (9종 고정 순서) |
+| `flow_label` | string | `순유입` / `순유출` / `보합` (UI가 색·막대 방향 결정) |
 | `flow_value` | number \| null | **기간 순유입/유출 금액**. USD는 달러, KRW는 원 단위의 절대 숫자. 통계가 없으면 `null` |
-| `flow_unit` | string | `USD` 또는 `KRW` |
+| `flow_unit` | string | `USD` / `KRW` / `%` — `%`는 가격·지수 변동률밖에 없을 때만(현재 달러) |
 | `ytd_return` | number \| null | 연초 대비 수익률 **숫자**(% 기호 없이, 예: `-18.0`). 모르면 `null` |
 | `source_url` | string | 출처 1개 |
 | `flow_usd_or_krw` | string | 같은 값을 사람이 읽는 문자열로 (`+$126.0B`, `-14.74조원`). 다른 도구·보고서가 그대로 인용 |
@@ -64,8 +64,9 @@
   "source_urls": ["https://..."] }
 ```
 
-- `listings.seoul`·`listings.metro`는 **건수(number)**, `direction`은 `증가`/`보합`/`감소`.
-- `price.seoul_weekly`·`metro_weekly`는 **주간 변동률 %(number)**, `jeonse_ratio`는 %(number).
+- `listings.seoul`·`listings.metro`는 **건수(number)** — 모르면 `null`. `direction`은 `증가`/`보합`/`감소`.
+- `price.seoul_weekly`·`metro_weekly`는 **주간 매매가격지수 변동률 %(number)** — 모르면 `null`.
+- `jeonse_ratio`는 %(number). 현재 값은 **KB 전국 아파트 전세가율**(지역별 전세가율은 공표 기준이 달라 섞지 않는다).
 - 확인되지 않은 값은 키를 넣지 않거나 `null`로 둔다(UI는 `—`로 표시). **추정치를 채우지 않는다.**
 
 ## history append 규칙
