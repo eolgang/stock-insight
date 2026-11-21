@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-11-21",
+  "regime": {
+    "label": "조정",
+    "note": "S&P 500은 10/6 고점 대비 -12%, 코스피는 6/22 고점 대비 -46.6%, 나스닥은 연중 마이너스. 지수 조정은 확인됐지만 HY 스프레드가 아직 확대 중이고 MMF 잔고가 사상 최대라 '하락 추세'로 단정할 근거는 부족.",
+    "verdict": "조정",
+    "reason": "고점 대비 -10~-47% 조정, 신용스프레드 확대·MMF 사상 최대로 추세 훼손은 미확인",
+    "basis_date": "2026-11-20"
+  },
+  "assets": [
+    {
+      "name": "미국주식",
+      "flow_usd_or_krw": "+$126.0B",
+      "flow_value": 126000000000,
+      "flow_unit": "USD",
+      "flow_label": "순유입",
+      "flow_period": "2026-10 미국 주식형 ETF 월간 순유입 (11/18 주 미국 주식펀드도 +$45.7B로 3주 연속 유입)",
+      "ytd_return": 1.0,
+      "ytd_return_label": "+1.0% (S&P 500, 2026-11-20)",
+      "source_url": "https://www.etf.com/sections/features/us-etf-monthly-summary-october-2026-results",
+      "note": "개인·패시브가 저가 매수로 받아내는 중. 반도체 ETF는 대규모 유출(SOXL -$4.2B, SOXX -$1.2B)"
+    },
+    {
+      "name": "한국주식",
+      "flow_usd_or_krw": "-14.74조원",
+      "flow_value": -14740000000000,
+      "flow_unit": "KRW",
+      "flow_label": "순유출",
+      "flow_period": "2026-11-01~20 코스피 외국인 순매도 (기관 +3.97조·개인 +3.89조·자사주 +6.85조가 받아냄)",
+      "ytd_return": 13.0,
+      "ytd_return_label": "+13.0% (코스피 4,869.96, 2026-11-20 / 6월 고점 대비 -46.6%)",
+      "source_url": "https://finji.ai/finji/kr/monthly-flow/2026-11/",
+      "note": "외국인 5월부터 7개월 연속 순매도, 누적 166.7조(연초~11/18 223.6조). 외국인은 같은 기간 국내 채권은 10월 +7.4조 순투자"
+    },
+    {
+      "name": "채권",
+      "flow_usd_or_krw": "+$74.0B",
+      "flow_value": 74000000000,
+      "flow_unit": "USD",
+      "flow_label": "순유입",
+      "flow_period": "2026-10 미국 채권형 ETF 월간 순유입",
+      "ytd_return": 1.3,
+      "ytd_return_label": "+1.3% (Bloomberg US Agg, 2026-11-13)",
+      "source_url": "https://www.etf.com/sections/features/us-etf-monthly-summary-october-2026-results",
+      "note": "11/20 미국 10년 4.94%(-20bp 주간), 2년 4.65%. 다만 11/18 주 글로벌 채권펀드는 -$3.2B로 2주 연속 유출, 하이일드 -$1.4B"
+    },
+    {
+      "name": "머니마켓",
+      "flow_usd_or_krw": "+$481B",
+      "flow_value": 481000000000,
+      "flow_unit": "USD",
+      "flow_label": "순유입",
+      "flow_period": "최근 52주 미국 MMF 총자산 증가 (총자산 $7.98조, 2026-11-18 / 11-04 $8.016조로 $8조 첫 돌파)",
+      "ytd_return": null,
+      "ytd_return_label": "잔고 사상 최대 (이자형 자산)",
+      "source_url": "https://www.ici.org/research/stats/mmf",
+      "note": "한국 MMF도 291.4조로 사상 최대(11-17), 11월 +28.4조 중 법인 28.6조·개인 -0.2조. 11/18 주 미국 MMF는 -$13.9B로 2주 연속 유출"
+    },
+    {
+      "name": "금",
+      "flow_usd_or_krw": "+$41B",
+      "flow_value": 41000000000,
+      "flow_unit": "USD",
+      "flow_label": "순유입",
+      "flow_period": "2026-01~10 글로벌 금 ETF 순유입 (보유 4,275t 사상 최대)",
+      "ytd_return": -18.0,
+      "ytd_return_label": "-18% ($3,537.90, 2026-11-20 / 1월 고점 대비 -35%)",
+      "source_url": "https://www.gold.org/goldhub/research/gold-etfs-holdings-and-flows/2026/11",
+      "note": "가격 하락에도 보유량은 사상 최대(10월 +$2.7B, 유럽 주도·미국 -$5.1억). 중앙은행 2026년 누적 675t 매입. 11/20 주간 금 -9.5%"
+    },
+    {
+      "name": "원자재",
+      "flow_usd_or_krw": "+$6B",
+      "flow_value": 6000000000,
+      "flow_unit": "USD",
+      "flow_label": "순유입",
+      "flow_period": "2026-10 원자재·대체 ETF 합산 유입(잠정)",
+      "ytd_return": 20.0,
+      "ytd_return_label": "+20% (Bloomberg Commodity TR, 2026-11-20 / 5주 연속 -11.5%)",
+      "source_url": "https://www.home.saxo/en-gb/content/articles/commodities/commodities-weekly-metal-rout-deepens-as-falling-diesel-offers-inflation-hope-20112026",
+      "note": "구리는 9/9 사상 최고 대비 -20%로 약세장 진입, 브렌트유는 연중 큰 폭 상승 뒤 조정. 연초 대비로는 원자재가 주식보다 나은 유일한 위험자산"
+    },
+    {
+      "name": "부동산",
+      "flow_usd_or_krw": "-14.5조원",
+      "flow_value": -14500000000000,
+      "flow_unit": "KRW",
+      "flow_label": "순유출",
+      "flow_period": "2026-Q3 서울 아파트 매매거래액 감소 (2분기 28.64조 → 3분기 14.59조, -49%)",
+      "ytd_return": 8.9,
+      "ytd_return_label": "+8.9% (서울 아파트 매매가, 2026-01~10)",
+      "source_url": "https://www.mt.co.kr/estate/2026/11/13/2026111215182422352",
+      "note": "가격은 버티고 거래가 반토막. 10월 서울 아파트 거래 3,209건(7월 5,855→-45%), 한강벨트 7개구 10월 -73.1% y/y, KB 매수우위지수 54.9. 미국 리츠(VNQ)는 7월 고점 대비 -6%"
+    },
+    {
+      "name": "코인",
+      "flow_usd_or_krw": "-$3.5B",
+      "flow_value": -3500000000,
+      "flow_unit": "USD",
+      "flow_label": "순유출",
+      "flow_period": "2026-11 미국 비트코인 현물 ETF 순유출 (11/1~19)",
+      "ytd_return": null,
+      "ytd_return_label": "2025-10 고점($126k) 대비 -55%, 분기 -28% (2026-11-20 $57k 미만)",
+      "source_url": "https://www.theblock.co/news/markets/2026-11-20-us-spot-bitcoin-etfs-see-582-million-in-daily-net-outflows-as-november-total-nears-3-5-billion-444217",
+      "note": "ETF 순자산 $766억. '디지털 금'이 아니라 고베타 위험자산으로 움직이며 주식·금과 동반 하락"
+    },
+    {
+      "name": "달러",
+      "flow_usd_or_krw": "주간 +0.3% (DXY 103.84)",
+      "flow_value": null,
+      "flow_unit": "USD",
+      "flow_label": "순유입",
+      "flow_period": "2026-11-20 주간 달러인덱스 변동 (19개월 최고 근처, 4주 연속 상승)",
+      "ytd_return": 6.0,
+      "ytd_return_label": "+6% 내외 (DXY 2026년 누적)",
+      "source_url": "https://stocktwits.com/news-articles/markets/equity/the-weekly-spread-what-shaped-us-treasury-yields-and-the-dollar-this-week-1/cNbmPyOR91X",
+      "note": "달러는 자금 흐름 통계가 없어 가격 변동을 대체 지표로 씀. 원·달러 1,336.2원(11/20)은 외국인 주식 매도에도 보합 — 반도체 수출 달러(+331% y/y)가 상쇄"
+    }
+  ],
+  "signals": [
+    {
+      "name": "하이일드·AI 크레딧 스프레드",
+      "value": "HY 348bp (11/5, 2025-05 이후 최고) · CCC 1,100bp · CoreWeave 5년 CDS 약 1,200bp",
+      "direction": "대피",
+      "interpretation": "1997년 이후 모든 베어마켓에서 크레딧 스프레드가 주가 바닥에 선행해 정점을 찍었다. 지금은 확대 중이라 바닥 신호가 아니다. 한계: HY 내 CCC 비중 6%, 사모크레딧·데이터센터 대출은 지수 밖.",
+      "source_url": "https://www.investing.com/news/stock-market-news/analysisai-debt-faces-pressure-as-democrats-prepare-to-take-over-congress-5014734"
+    },
+    {
+      "name": "펀드매니저 현금 비중 (BofA FMS)",
+      "value": "현금 3.6% (10월 3.9%) · 글로벌 주식 OW +41% · Bull&Bear 7.4",
+      "direction": "중립",
+      "interpretation": "현금이 낮다는 건 '팔 사람이 이미 팔았다'가 아니라 '살 사람이 없다'는 뜻. 과거 바닥은 현금 5% 이상·주식 언더웨이트에서 나왔다. 반등이 와도 연료가 부족한 포지션.",
+      "source_url": "https://atranicapital.substack.com/p/november-2026-bank-of-america-global"
+    },
+    {
+      "name": "머니마켓펀드(MMF) 잔액",
+      "value": "미국 $7.98조 · 한국 291.4조 · 모두 사상 최대",
+      "direction": "매집",
+      "interpretation": "현금성 대기 자금이 최고치. 반등 시 실탄이지만 아직 시장에 들어오지 않았다는 뜻. 2008-11 MMF 정점 후 약 4개월 뒤 주가 바닥. 최근 2주 미국은 순유출(-$13.9B)로 대피 속도가 둔화.",
+      "source_url": "https://www.ici.org/research/stats/mmf"
+    },
+    {
+      "name": "수급 주체 (누가 받아내는가)",
+      "value": "외국인 코스피 -166.7조(5~11월, 7개월 연속) vs 개인 +3.89조·자사주 +6.85조(11월)",
+      "direction": "대피",
+      "interpretation": "물량 분산 구조. 매집이라면 거래량이 줄면서 가격이 버티고 기관·내부자가 사야 하는데, 지금은 거래량 감소+가격 하락+신용잔고 -9.8%가 동시 진행.",
+      "source_url": "https://finji.ai/finji/kr/monthly-flow/2026-11/"
+    },
+    {
+      "name": "금·위험자산 동조 여부",
+      "value": "금 -9.5%(주간) + S&P -3.7%(11/20) + 비트코인 -28%(분기) 동반 하락, 미국채만 상승",
+      "direction": "대피",
+      "interpretation": "유동성 경색형 신호(2008-10·2022와 동형). 금이 주식과 반대로 오르면 진짜 안전자산 로테이션인데, 지금은 금이 현금 확보용으로 팔렸다. 단 금 ETF 보유량·중앙은행 매입은 사상 최대라 '가격↓ 보유↑' 다이버전스는 별도 추적.",
+      "source_url": "https://www.kitco.com/news/article/2026-11-20/gold-falls-toward-3500-silver-slides-stock-markets-enter-correction"
+    }
+  ],
+  "korea_property": {
+    "as_of": "2026-11-17",
+    "listings": {
+      "seoul": 80477,
+      "direction": "증가",
+      "note": "서울 아파트 매물 8만477건(11/10, 아실). 8/3 세제개편안 발표 때 6만409건 대비 +33.2%"
+    },
+    "price": {
+      "seoul_weekly": 0.03,
+      "note": "서울 아파트 주간 매매가 +0.03%(11/16 기준, 5주 연속 둔화·보합 근접). 10월 월간 서울 +0.54%·전국 +0.33%, 강남3구는 11~15주 연속 하락"
+    },
+    "source_urls": [
+      "https://www.newsis.com/view/NISX20261110_0003861918",
+      "https://www.yna.co.kr/view/AKR20261119070900003"
+    ]
+  },
+  "history": [
+    {
+      "as_of": "2026-11-21",
+      "regime": {
+        "label": "조정",
+        "note": "코스피 6/22 고점 대비 -46.6%, S&P 500 10/6 고점 대비 -12%. 주식·금·코인·구리가 동반 하락하고 미국채·MMF로만 자금이 이동."
+      },
+      "assets": [
+        { "name": "미국주식", "flow_label": "순유입", "flow_value": 126000000000, "flow_unit": "USD", "ytd_return": 1.0, "source_url": "https://www.etf.com/sections/features/us-etf-monthly-summary-october-2026-results" },
+        { "name": "한국주식", "flow_label": "순유출", "flow_value": -14740000000000, "flow_unit": "KRW", "ytd_return": 13.0, "source_url": "https://finji.ai/finji/kr/monthly-flow/2026-11/" },
+        { "name": "채권", "flow_label": "순유입", "flow_value": 74000000000, "flow_unit": "USD", "ytd_return": 1.3, "source_url": "https://www.etf.com/sections/features/us-etf-monthly-summary-october-2026-results" },
+        { "name": "머니마켓", "flow_label": "순유입", "flow_value": 481000000000, "flow_unit": "USD", "ytd_return": null, "source_url": "https://www.ici.org/research/stats/mmf" },
+        { "name": "금", "flow_label": "순유입", "flow_value": 41000000000, "flow_unit": "USD", "ytd_return": -18.0, "source_url": "https://www.gold.org/goldhub/research/gold-etfs-holdings-and-flows/2026/11" },
+        { "name": "원자재", "flow_label": "순유입", "flow_value": 6000000000, "flow_unit": "USD", "ytd_return": 20.0, "source_url": "https://www.home.saxo/en-gb/content/articles/commodities/commodities-weekly-metal-rout-deepens-as-falling-diesel-offers-inflation-hope-20112026" },
+        { "name": "부동산", "flow_label": "순유출", "flow_value": -14500000000000, "flow_unit": "KRW", "ytd_return": 8.9, "source_url": "https://www.mt.co.kr/estate/2026/11/13/2026111215182422352" },
+        { "name": "코인", "flow_label": "순유출", "flow_value": -3500000000, "flow_unit": "USD", "ytd_return": null, "source_url": "https://www.theblock.co/news/markets/2026-11-20-us-spot-bitcoin-etfs-see-582-million-in-daily-net-outflows-as-november-total-nears-3-5-billion-444217" },
+        { "name": "달러", "flow_label": "순유입", "flow_value": null, "flow_unit": "USD", "ytd_return": 6.0, "source_url": "https://stocktwits.com/news-articles/markets/equity/the-weekly-spread-what-shaped-us-treasury-yields-and-the-dollar-this-week-1/cNbmPyOR91X" }
+      ],
+      "signals": [
+        { "name": "하이일드·AI 크레딧 스프레드", "value": "HY 348bp · CCC 1,100bp · CoreWeave CDS 약 1,200bp", "direction": "대피", "interpretation": "확대 중, 바닥 신호 아직 없음" },
+        { "name": "펀드매니저 현금 비중 (BofA FMS)", "value": "현금 3.6% · 주식 OW +41% · Bull&Bear 7.4", "direction": "중립", "interpretation": "살 여력이 없는 포지션" },
+        { "name": "머니마켓펀드(MMF) 잔액", "value": "미국 $7.98조 · 한국 291.4조 (사상 최대)", "direction": "매집", "interpretation": "대기 자금 최고치, 최근 2주는 순유출" },
+        { "name": "수급 주체 (누가 받아내는가)", "value": "외국인 -166.7조(7개월) vs 개인 +3.89조·자사주 +6.85조", "direction": "대피", "interpretation": "물량 분산 구조" },
+        { "name": "금·위험자산 동조 여부", "value": "금 -9.5% · S&P -3.7% · BTC -28%(분기) 동반", "direction": "대피", "interpretation": "유동성 경색형 대피" }
+      ],
+      "korea_property": {
+        "as_of": "2026-11-17",
+        "listings": { "seoul": 80477, "direction": "증가", "note": "서울 아파트 매물 8만477건(11/10, 아실), 8월 초 대비 +33.2%" },
+        "price": { "seoul_weekly": 0.03, "note": "서울 아파트 주간 +0.03%(11/16), 5주 연속 둔화" },
+        "source_urls": ["https://www.newsis.com/view/NISX20261110_0003861918", "https://www.yna.co.kr/view/AKR20261119070900003"]
+      }
+    }
+  ]
+}
