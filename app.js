@@ -979,7 +979,7 @@
       }
       var tdate = patApexDate(chart, tr.apex);
       var ttext = tr.name + ' · 꼭짓점 ' + tdate + (tr.apex > n - 1 ? ' 예상' : '');
-      front += txt(W - pad.r - 2, y(tr.apex > n - 1 ? tr.mS * (n - 1) + tr.bS : ay) - 9, ttext, COL_TRI, narrow ? 9 : 10, 'end');
+      label(y(tr.apex > n - 1 ? tr.mS * (n - 1) + tr.bS : ay) - 9, ttext, COL_TRI, 7);
       counts.tri = 1;
     }
 
@@ -1006,15 +1006,24 @@
       });
     }
 
-    /* 라벨 겹침: 우선순위(추세선 > 박스 > 삼각 > 수평) 순으로 자리를 잡고, 겹치면 생략 */
+    /* 라벨 겹침: 우선순위(삼각 > 추세선 > 박스 > 수평) 순으로 오른쪽부터 자리를 잡고,
+       그 자리가 막히면 왼쪽으로 한 칸 밀고, 세 자리 모두 막히면 라벨 없이 선만 남긴다. */
     labels.sort(function (a, b) { return b.pr - a.pr; });
     var kept = [], top = pad.t + 2, bot = geo.H - pad.b - 2;
+    var slots = narrow ? [0, -78] : [0, -86, -172, -258];
     labels.forEach(function (L) {
       if (narrow && kept.length >= 3) return;
       if (L.y < top || L.y > bot) return;
-      for (var i = 0; i < kept.length; i++) if (Math.abs(kept[i] - L.y) < 11) return;
-      kept.push(L.y);
-      front += txt(W - pad.r - 2, L.y, L.text, L.color, narrow ? 9 : 10, 'end');
+      for (var si = 0; si < slots.length; si++) {
+        var lx = W - pad.r - 2 + slots[si], ok = lx > pad.l + 54;
+        for (var i = 0; ok && i < kept.length; i++) {
+          if (Math.abs(kept[i].y - L.y) < 12 && Math.abs(kept[i].x - lx) < 86) ok = false;
+        }
+        if (!ok) continue;
+        kept.push({ y: L.y, x: lx });
+        front += txt(lx, L.y, L.text, L.color, narrow ? 9 : 10, 'end');
+        return;
+      }
     });
 
     return { back: back, front: front, counts: counts };
