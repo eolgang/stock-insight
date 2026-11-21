@@ -665,6 +665,9 @@ svg.chart{width:100%;height:auto;display:block;overflow:visible}
 .ma-l.on span{color:var(--txt)}
 .ma-l.on b{color:var(--c)}
 .ma-l.nodata{opacity:.35;cursor:default;text-decoration:line-through}
+@media (min-width:760px){
+  .ma-legend{flex-wrap:wrap;overflow:visible}
+}
 .ma-canvas{width:100%}
 .ma-canvas svg{display:block;width:100%}
 
