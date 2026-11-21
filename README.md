@@ -13,6 +13,9 @@ index.html          화면 틀 (티커·헤더·히어로·탭·푸터)
 styles.css          다크 핀테크 테마, 모바일 우선
 app.js              JSON을 읽어 탭·표·차트·계산기 렌더링
 data/insights.json  ★ 모든 콘텐츠(수치·표·뉴스·주석)는 이 파일 하나에서 관리
+data/screener*.json 조건검색 스캔 결과·성과 히스토리 (scripts/scan_krx.py가 생성)
+data/ma-charts.json 종목 차트용 일봉·이동평균 (scripts/scan_krx.py가 생성)
+scripts/scan_krx.py 장마감 조건검색 스캐너
 favicon.svg         아이콘
 .nojekyll           Jekyll 처리 없이 정적 파일 그대로 서빙
 ```
@@ -23,12 +26,25 @@ favicon.svg         아이콘
 |---|---|
 | 시장 브리핑 | 11/20 마감 지수·지지선 표, 거장들의 매크로 신호등(공포·탐욕/VIX/10년물 원형 계기판 + 지표별 카드·기준선 표), 10년물 월별 차트, 고점 대비 낙폭 차트, 5% 금리 이력, 일정 |
 | 관심종목 | 주간 스윙 후보(매주 일요일 20:00 갱신 · 최근 4주 롤링 추적) + 테마별 추적 종목 카드/요약 표 |
+| 조건검색 | 장마감 확정 데이터 자동 스캔(20일선 돌파·52주 신고가·수급 포착·눌림목) + 조건별 적중률, 종목 클릭 시 5·20·60·120·240·360·480·720일선 차트 |
 | 실시간 차트 | TradingView 위젯 + 종목 전환(NVDA·TSLA·TSM·AVGO·APH·SPY·QQQ·삼성전자·SK하이닉스·금), 20·200일선 |
 | 뉴스 | 한국어 핵심 뉴스 카드 + TradingView 실시간 속보 |
 | 스윙 전략 | 4대 선정 기준, 20일선 이격도 게이지/실측/기준표, 진입·청산 룰 |
 | 손익 계산기 | 평단가·목표가·손절가·손익비 실시간 계산(원/달러) |
 | 폭등 징표 | 테슬라 vs 엔비디아 비교, 공통 징표, 가짜 신호 반례, 13F 시차 |
 | 13F 수급 | 2026 Q3 5사 수급, AI 병목주·암페놀 액면분할 주의 |
+
+## 조건검색 스캐너
+
+```bash
+python3 scripts/scan_krx.py                 # 직전 거래일 기준 스캔 (약 1~2분, 표준 라이브러리만 사용)
+python3 scripts/scan_krx.py --seed 10       # 최근 10거래일 소급 계산(미래 데이터 미사용)
+python3 scripts/scan_krx.py --as-of 20261113
+```
+
+- 데이터: 네이버 금융 장마감 확정 데이터(일봉 수정주가·시가총액·거래대금·투자자별 순매수). 유료 API·계정 불필요.
+- 출력: `data/screener.json`(오늘 결과) · `data/screener-history.json`(날짜별 히트 + 1·5·10·20거래일 뒤 성과) · `data/ma-charts.json`(종목 차트용 일봉 900개 + 이동평균 8종)
+- 자동 갱신: Pickle 정기 작업(장마감 브리핑 15:40 · 주간 스윙 일 20:00)에서 위 스크립트를 돌려 커밋·푸시한다. GitHub Actions로 옮기려면 `docs/daily-scan.workflow.yml`을 `.github/workflows/daily-scan.yml`로 옮기면 된다(저장소 workflow 권한 필요).
 
 ## 업데이트 방법 (브리핑 때마다)
 
