@@ -16,9 +16,21 @@ data/insights.json  ★ 모든 콘텐츠(수치·표·뉴스·주석)는 이 파
 data/screener*.json 조건검색 스캔 결과·성과 히스토리 (scripts/scan_krx.py가 생성)
 data/ma-charts.json 종목 차트용 일봉·이동평균 (scripts/scan_krx.py가 생성)
 scripts/scan_krx.py 장마감 조건검색 스캐너
+chart-inbox.js/css  “차트 분석 맡기기” 업로드 버튼(플로팅 + · GitHub Contents API 커밋)
+inbox/              업로드된 차트 캡처·메모(페이지에서 자동 커밋)
 favicon.svg         아이콘
 .nojekyll           Jekyll 처리 없이 정적 파일 그대로 서빙
 ```
+
+## 차트 분석 맡기기 (업로드)
+
+사이트 어디서든 보이는 오른쪽 아래 **+ 차트 분석 맡기기** 버튼으로 HTS 차트 캡처를 GitHub에 바로 커밋한다.
+
+- 저장 위치: `inbox/YYYYMMDD-HHMMSS-파일명.확장자` · 메모를 적으면 같은 시각의 `…-memo.txt`도 함께 커밋
+- 인증: 모달 **설정** 탭에 fine-grained PAT를 붙여넣으면 `localStorage`에만 저장된다(서버 전송 없음).
+  토큰 범위는 `stock-insight` 저장소 + **Contents: Read and write**.
+- ⚠ 저장소가 공개라 업로드한 이미지는 공개 URL(`https://eolgang.github.io/stock-insight/inbox/…`)로도 열린다.
+- 읽는 방법: `git pull` 후 `ls inbox/`, 또는 `gh api /repos/eolgang/stock-insight/contents/inbox`
 
 ## 탭
 

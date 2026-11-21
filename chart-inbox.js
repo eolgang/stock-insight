@@ -568,7 +568,7 @@
     saveCfg({ token: '', visibility: null });
     ui.token.value = '';
     ui.token.placeholder = 'github_pat_… 또는 ghp_…';
-    setState('err', '이 브라우저에 저장된 키를 지웠습니다.');
+    setState('', '이 브라우저에 저장된 키를 지웠습니다.');
     refreshWarning();
   }
 
