@@ -486,7 +486,7 @@ svg.chart{width:100%;height:auto;display:block;overflow:visible}
   border:1px solid var(--line);border-radius:13px;padding:12px;
   background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.012));
 }
-.res.hero{
+.res.primary{
   grid-column:1/-1;
   background:linear-gradient(135deg,rgba(124,245,200,.15),rgba(102,217,255,.07));
   border-color:rgba(124,245,200,.3);
@@ -496,7 +496,7 @@ svg.chart{width:100%;height:auto;display:block;overflow:visible}
   font-size:clamp(17px,4.6vw,21px);font-weight:800;margin-top:4px;
   font-variant-numeric:tabular-nums;letter-spacing:-.02em;word-break:break-all;
 }
-.res.hero .rv{font-size:clamp(23px,6.6vw,30px)}
+.res.primary .rv{font-size:clamp(23px,6.6vw,30px)}
 .res .rs{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5}
 
 .planbar{margin-top:15px}

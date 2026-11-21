@@ -372,7 +372,10 @@
       { proName: 'FX_IDC:USDKRW', title: '원/달러' },
       { proName: 'BITSTAMP:BTCUSD', title: '비트코인' },
       { proName: 'AMEX:EWY', title: '한국 ETF' },
-      { proName: 'NASDAQ:QQQ', title: '나스닥100(QQQ)' }
+      { proName: 'NASDAQ:QQQ', title: '나스닥100(QQQ)' },
+      { proName: 'NASDAQ:NVDA', title: '엔비디아' },
+      { proName: 'NYSE:TSM', title: 'TSMC' },
+      { proName: 'NASDAQ:AVGO', title: '브로드컴' }
     ];
   }
 
@@ -452,7 +455,7 @@
     return '<div class="block"><div class="sim" data-cur="' + esc(cur) + '">' +
       '<div class="sim-top">' +
         '<div><div class="sim-title">평단가 · 목표가 · 손절가</div>' +
-        '<div class="sim-sub">숫자를 바꾸면 아래 결과가 바로 바뀝니다</div></div>' +
+        '<div class="sim-sub">숫자를 바꾸면 결과가 바로 바뀝니다 · 통화 버튼은 표시 단위만 변경</div></div>' +
         '<div class="cur-toggle">' +
           '<button class="cur' + (cur === 'KRW' ? ' on' : '') + '" type="button" data-cur="KRW">₩ 원</button>' +
           '<button class="cur' + (cur === 'USD' ? ' on' : '') + '" type="button" data-cur="USD">$ 달러</button>' +
@@ -471,7 +474,7 @@
           '<input class="sim-field" type="number" inputmode="decimal" step="1" data-k="stop" value="' + esc(d.stop || 0) + '"><span class="unit">%</span></div>' +
       '</div>' +
       '<div class="sim-out">' +
-        '<div class="res hero"><div class="rl">최종 예상 평단가</div><div class="rv" data-out="avg">—</div><div class="rs" data-out="sum">—</div></div>' +
+        '<div class="res primary"><div class="rl">최종 예상 평단가</div><div class="rv" data-out="avg">—</div><div class="rs" data-out="sum">—</div></div>' +
         '<div class="res"><div class="rl">총 매수 금액</div><div class="rv" data-out="cost">—</div><div class="rs" data-out="costd">—</div></div>' +
         '<div class="res"><div class="rl">목표 매도가</div><div class="rv t-pos" data-out="tp">—</div><div class="rs" data-out="tpd">—</div></div>' +
         '<div class="res"><div class="rl">손절 기준가</div><div class="rv t-neg" data-out="sl">—</div><div class="rs" data-out="sld">—</div></div>' +
