@@ -752,6 +752,7 @@
           if (st.touch < 3) continue;
           if (st.viol > Math.max(3, 0.12 * (n - pa.i))) continue;
           cur = m * (n - 1) + b0;
+          if (Math.abs(cur / c[n - 1] - 1) > 0.35) continue;
           tl = patTol(c, atr, n - 1);
           broken = (kind === 'support' ? c[n - 1] < cur - tl : c[n - 1] > cur + tl);
           if (broken) continue;
