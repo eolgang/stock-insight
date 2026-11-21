@@ -69,6 +69,18 @@ a{color:var(--accent-2)}
 .tk .k{color:var(--dim);font-size:11px}
 .tk .v{font-weight:700;font-variant-numeric:tabular-nums}
 .tk .n{font-size:11px;font-weight:600}
+.ticker-snap{
+  display:flex;align-items:center;gap:7px;
+  overflow-x:auto;padding:0 14px 8px;
+  scrollbar-width:none;
+}
+.ticker-snap::-webkit-scrollbar{display:none}
+.snap-lead{
+  flex:0 0 auto;font-size:9px;letter-spacing:.06em;color:var(--dim);
+  border:1px solid var(--line);border-radius:5px;padding:2px 5px;white-space:nowrap;
+}
+.ticker-snap .tk{padding:3px 9px;font-size:11.5px}
+.ticker-snap .tk .k{font-size:10px}
 .t-neg{color:var(--neg)}
 .t-pos{color:var(--pos)}
 .t-warn{color:var(--warn)}

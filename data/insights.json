@@ -9,11 +9,16 @@
     "ticker": [
       { "label": "코스피", "value": "4,869.96", "note": "-5.21%", "tone": "neg" },
       { "label": "S&P 500", "value": "6,910.39", "note": "-2.9%", "tone": "neg" },
-      { "label": "나스닥", "value": "22,617.73", "note": "-4.3%", "tone": "neg" },
+      { "label": "나스닥 종합", "value": "22,617.73", "note": "-4.3%", "tone": "neg" },
       { "label": "미 10년물", "value": "4.92%", "note": "5%선 아래", "tone": "good" },
       { "label": "금", "value": "$3,515", "note": "하락", "tone": "neg" },
       { "label": "원·달러", "value": "1,341~1,343", "note": "역외", "tone": "warn" },
       { "label": "비트코인", "value": "$58,678", "note": "6만선 붕괴", "tone": "neg" }
+    ],
+    "snapshot": [
+      { "label": "코스피", "value": "4,869.96", "note": "-5.21%", "tone": "neg" },
+      { "label": "나스닥 종합", "value": "22,617.73", "note": "-4.3%", "tone": "neg" },
+      { "label": "미 10년물", "value": "4.92%", "note": "5%선 아래", "tone": "good" }
     ]
   },
   "hero": {

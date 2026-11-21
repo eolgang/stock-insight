@@ -277,6 +277,16 @@
   function mountChart(block, symbol) {
     var wrap = document.getElementById('tv-chart');
     if (!wrap) return;
+    if (symbol.indexOf('KRX:') === 0) {
+      var code = symbol.split(':')[1];
+      wrap.innerHTML = '<div class="tv-fallback">' +
+        '<div><b style="color:#e9eef7;font-size:13px">한국 거래소 종목은 TradingView 무료 임베드에서 표시되지 않습니다.</b><br>' +
+        '라이선스 제한으로 위젯 안에서는 열리지 않습니다. 아래에서 바로 볼 수 있어요.<br><br>' +
+        '<a href="https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(symbol) + '" target="_blank" rel="noopener">TradingView에서 보기 →</a><br>' +
+        '<a href="https://finance.naver.com/item/main.naver?code=' + encodeURIComponent(code) + '" target="_blank" rel="noopener">네이버 금융에서 보기 →</a>' +
+        '<br><br><span style="font-size:11px">미국 종목·ETF 버튼은 위젯 안에서 그대로 열립니다.</span></div></div>';
+      return;
+    }
     wrap.innerHTML = '<div id="tv-inner" style="height:100%;width:100%"></div>';
     loadTvJs().then(function () {
       /* eslint-disable no-new */
@@ -343,6 +353,8 @@
     if (!ticker || ticker.querySelector('.ticker-fallback')) return;
     var old = ticker.querySelector('.tradingview-widget-container');
     if (old) old.remove();
+    var snap = ticker.querySelector('.ticker-snap');
+    if (snap) snap.remove();
     var wrap = document.createElement('div');
     wrap.className = 'ticker-fallback';
     wrap.innerHTML = (site.ticker || []).map(function (t) {
@@ -351,6 +363,31 @@
         '<span class="n ' + tone(t.tone) + '">' + esc(t.note) + '</span></span>';
     }).join('');
     ticker.appendChild(wrap);
+  }
+
+  function travelSymbols() {
+    return [
+      { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
+      { proName: 'TVC:GOLD', title: '금' },
+      { proName: 'FX_IDC:USDKRW', title: '원/달러' },
+      { proName: 'BITSTAMP:BTCUSD', title: '비트코인' },
+      { proName: 'AMEX:EWY', title: '한국 ETF' },
+      { proName: 'NASDAQ:QQQ', title: '나스닥100(QQQ)' }
+    ];
+  }
+
+  function mountSnap(site) {
+    var ticker = document.getElementById('ticker');
+    if (!ticker || !site.snapshot || !site.snapshot.length) return;
+    if (ticker.querySelector('.ticker-snap')) return;
+    var row = document.createElement('div');
+    row.className = 'ticker-snap';
+    row.innerHTML = '<span class="snap-lead">11/20 종가</span>' + site.snapshot.map(function (t) {
+      return '<span class="tk"><span class="k">' + esc(t.label) + '</span>' +
+        '<span class="v">' + esc(t.value) + '</span>' +
+        '<span class="n ' + tone(t.tone) + '">' + esc(t.note) + '</span></span>';
+    }).join('');
+    ticker.appendChild(row);
   }
 
   function mountTicker(site) {
@@ -363,15 +400,7 @@
     s.async = true;
     s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js';
     s.text = JSON.stringify({
-      symbols: [
-        { proName: 'KRX:KOSPI', title: '코스피' },
-        { proName: 'FOREXCOM:SPXUSD', title: 'S&P 500' },
-        { proName: 'NASDAQ:NDX', title: '나스닥 100' },
-        { proName: 'TVC:US10Y', title: '미 10년물' },
-        { proName: 'TVC:GOLD', title: '금' },
-        { proName: 'FX_IDC:USDKRW', title: '원/달러' },
-        { proName: 'BITSTAMP:BTCUSD', title: '비트코인' }
-      ],
+      symbols: travelSymbols(),
       showSymbolLogo: true,
       isTransparent: true,
       displayMode: 'adaptive',
@@ -675,6 +704,7 @@
         buildTabs(data.sections);
         bindDelegates();
         mountTicker(data.site);
+        mountSnap(data.site);
 
         var initial = (location.hash || '').replace('#', '');
         setTab(initial, false);
