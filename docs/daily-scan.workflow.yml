@@ -1,0 +1,50 @@
+# GitHub Actions 워크플로 초안 (자동 실행되지 않음)
+# 이 파일을 .github/workflows/daily-scan.yml 로 옮기면 매 평일 16:10(KST) 자동 실행됩니다.
+# 저장소에 workflow 파일을 올리려면 GitHub 쪽 권한(workflows)이 필요해, 현재는 파일만 남겨 둡니다.
+# 당장의 자동 갱신은 Pickle 정기 작업(장마감 브리핑·주간 스윙)에서 이 스크립트를 돌려 처리합니다.
+
+name: 장마감 조건검색 스캔
+
+# 평일 한국 장마감(15:30) 뒤 확정 데이터로 조건검색을 돌린다.
+# UTC 07:10 = KST 16:10
+on:
+  schedule:
+    - cron: '10 7 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 스캐너는 표준 라이브러리만 쓰므로 pip install 단계가 필요 없다.
+      - name: 조건검색 스캔
+        run: python3 scripts/scan_krx.py --out-dir data
+
+      - name: 결과 커밋·푸시
+        run: |
+          git config user.name "eolmi-scan"
+          git config user.email "eolmi-scan@users.noreply.github.com"
+          git add data/screener.json data/screener-history.json data/ma-charts.json
+          if git diff --cached --quiet; then
+            echo "변경 없음 — 커밋 생략"
+            exit 0
+          fi
+          STAMP=$(TZ=Asia/Seoul date +%Y-%m-%d)
+          git commit -m "chore: ${STAMP} 장마감 조건검색 갱신"
+          git push
