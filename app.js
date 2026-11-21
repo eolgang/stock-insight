@@ -978,7 +978,8 @@
           COL_TRI + '" stroke="#080a0f" stroke-width="1"/>';
       }
       var tdate = patApexDate(chart, tr.apex);
-      var ttext = tr.name + ' · 꼭짓점 ' + tdate + (tr.apex > n - 1 ? ' 예상' : '');
+      var ttext = narrow ? ('삼각수렴 ' + tdate + (tr.apex > n - 1 ? ' 예상' : ''))
+        : (tr.name + ' · 꼭짓점 ' + tdate + (tr.apex > n - 1 ? ' 예상' : ''));
       label(y(tr.apex > n - 1 ? tr.mS * (n - 1) + tr.bS : ay) - 9, ttext, COL_TRI, 7);
       counts.tri = 1;
     }
@@ -989,6 +990,9 @@
         if (!ln) return;
         var col = k === 'support' ? COL_S : COL_R;
         front += '<line x1="' + x(ln.from).toFixed(1) + '" y1="' + y(ln.m * ln.from + ln.b).toFixed(1) +
+          '" x2="' + x(n - 1).toFixed(1) + '" y2="' + y(ln.m * (n - 1) + ln.b).toFixed(1) +
+          '" stroke="' + col + '" stroke-width="5.5" stroke-opacity=".16" stroke-linecap="round"/>' +
+          '<line x1="' + x(ln.from).toFixed(1) + '" y1="' + y(ln.m * ln.from + ln.b).toFixed(1) +
           '" x2="' + x(n - 1).toFixed(1) + '" y2="' + y(ln.m * (n - 1) + ln.b).toFixed(1) +
           '" stroke="' + col + '" stroke-width="1.7" stroke-linecap="round"/>';
         label(y(ln.m * (n - 1) + ln.b), (k === 'support' ? '지지 ' : '저항 ') + fmtPx(ln.m * (n - 1) + ln.b), col, 6);
