@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>얼미리서치 · 주식 인사이트</title>
+<meta name="description" content="얼미리서치(Eolmi Research) — 시장 브리핑과 지지 구간, 국내 스윙 20일선 이격도 룰, 테슬라·엔비디아 폭등 직전 징표, 월가 13F 수급을 한 화면에 정리한 개인 리서치 페이지.">
+<meta name="theme-color" content="#080a0f">
+<meta property="og:title" content="얼미리서치 · 주식 인사이트">
+<meta property="og:description" content="시장 브리핑 · 스윙 룰 · 13F 수급을 한 화면에.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 실시간 시세 티커 -->
+<div class="ticker" id="ticker" aria-label="주요 지수·금리·환율 실시간 시세"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 28 28" width="28" height="28">
+        <rect x="1" y="1" width="26" height="26" rx="8" fill="url(#bg)"/>
+        <defs>
+          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#12352c"/>
+            <stop offset="1" stop-color="#0d2233"/>
+          </linearGradient>
+        </defs>
+        <g stroke="#7cf5c8" stroke-width="1.4" stroke-linecap="round">
+          <line x1="8" y1="8.2" x2="8" y2="19.8"/>
+          <line x1="14" y1="6.6" x2="14" y2="21"/>
+          <line x1="20" y1="9.4" x2="20" y2="20.4"/>
+        </g>
+        <rect x="6" y="12.4" width="4" height="5.2" rx="1" fill="#7cf5c8"/>
+        <rect x="12" y="9.2" width="4" height="8.4" rx="1" fill="#66d9ff"/>
+        <rect x="18" y="13.6" width="4" height="4.4" rx="1" fill="#ff5b6e"/>
+      </svg>
+    </span>
+    <span class="brand-text">
+      <strong>얼미리서치</strong>
+      <small>EOLMI RESEARCH</small>
+    </span>
+  </div>
+  <div class="stamp"><em>최근 업데이트</em><b id="updated">2026-11-21</b></div>
+</header>
+
+<section class="hero">
+  <p class="eyebrow" id="heroEyebrow">MARKET SNAPSHOT</p>
+  <h1 id="heroTitle">오늘의 시장, <span class="grad">숫자로 점검</span></h1>
+  <p class="lead" id="heroLead"></p>
+  <p class="asof" id="dataAsOf"></p>
+  <div class="statgrid" id="heroStats"></div>
+</section>
+
+<nav class="tabs" id="tabs" role="tablist" aria-label="리서치 섹션"></nav>
+
+<main id="app" class="app">
+  <noscript><p class="empty">이 페이지는 데이터를 불러와 화면을 그립니다. JavaScript를 켜 주세요.</p></noscript>
+</main>
+
+<footer class="footer">
+  <div class="foot-brand"><strong>얼미리서치</strong><span>Eolmi Research</span></div>
+  <p class="foot-note">개인 리서치 노트입니다. 숫자는 표에 적힌 기준일의 마감치이며, 시장 상황에 따라 달라집니다.</p>
+  <p class="foot-disclaimer" id="disclaimer"></p>
+  <p class="foot-meta"><span id="updated2">2026-11-21</span> 갱신 · GitHub Pages</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
