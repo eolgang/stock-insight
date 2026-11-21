@@ -825,6 +825,7 @@ def main() -> None:
     args = ap.parse_args()
     if args.out:
         globals()["OUT_JSON"] = Path(args.out)
+        globals()["OUT_SIGNALS"] = Path(args.out).with_suffix(".signals.json")
 
     uni = prepare_universe()
     print(f"[universe] 코스피+코스닥 보통주 {len(uni)}종목", flush=True)
