@@ -1015,17 +1015,24 @@
     labels.sort(function (a, b) { return b.pr - a.pr; });
     var kept = [], top = pad.t + 2, bot = geo.H - pad.b - 2;
     var slots = narrow ? [0, -78] : [0, -86, -172, -258];
+    var fsz = narrow ? 9 : 10;
+    function textW(t) {
+      var w = 0;
+      for (var i = 0; i < t.length; i++) w += t.charCodeAt(i) > 0x2e80 ? fsz * 1.02 : fsz * 0.56;
+      return w;
+    }
     labels.forEach(function (L) {
       if (narrow && kept.length >= 3) return;
       if (L.y < top || L.y > bot) return;
+      var lw = textW(L.text);
       for (var si = 0; si < slots.length; si++) {
-        var lx = W - pad.r - 2 + slots[si], ok = lx > pad.l + 54;
+        var lx = W - pad.r - 2 + slots[si], ok = lx - lw > pad.l + 6;
         for (var i = 0; ok && i < kept.length; i++) {
-          if (Math.abs(kept[i].y - L.y) < 12 && Math.abs(kept[i].x - lx) < 86) ok = false;
+          if (Math.abs(kept[i].y - L.y) < 12 && Math.abs(kept[i].x - lx) < Math.max(kept[i].w, lw)) ok = false;
         }
         if (!ok) continue;
-        kept.push({ y: L.y, x: lx });
-        front += txt(lx, L.y, L.text, L.color, narrow ? 9 : 10, 'end');
+        kept.push({ y: L.y, x: lx, w: lw });
+        front += txt(lx, L.y, L.text, L.color, fsz, 'end');
         return;
       }
     });
