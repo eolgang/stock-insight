@@ -390,6 +390,42 @@ svg.chart{width:100%;height:auto;display:block;overflow:visible}
 .gauge-legend span{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
 .gauge-legend i{width:9px;height:9px;border-radius:3px;display:inline-block}
 
+/* ---------- dial gauge (반원형 계기판) ---------- */
+.dial-grid{display:grid;gap:11px;grid-template-columns:1fr}
+.dial{
+  border:1px solid var(--line);border-radius:14px;padding:12px 13px 11px;
+  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.012));
+  display:flex;flex-direction:column;
+}
+.dial-top{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:22px}
+.dial-name{font-size:11.5px;font-weight:700;color:var(--muted);letter-spacing:-.01em}
+.dial-status{
+  font-size:10px;font-weight:750;letter-spacing:.01em;white-space:nowrap;
+  padding:3px 8px;border-radius:999px;border:1px solid var(--line);
+  background:rgba(255,255,255,.045);color:var(--muted);
+}
+.dial-status.t-good{color:var(--accent);border-color:rgba(124,245,200,.34);background:rgba(124,245,200,.10)}
+.dial-status.t-warn{color:var(--warn);border-color:rgba(255,191,90,.34);background:rgba(255,191,90,.10)}
+.dial-status.t-alert{color:var(--alert);border-color:rgba(255,122,89,.34);background:rgba(255,122,89,.12)}
+.dial-svg{width:100%;height:auto;display:block;margin:6px 0 -2px}
+.dseg-track{fill:none;stroke:rgba(255,255,255,.07);stroke-width:14}
+.dseg{fill:none;stroke-width:14;stroke-linecap:butt}
+.dseg.g-good{stroke:#3fbf98}
+.dseg.g-warn{stroke:#d99a2b}
+.dseg.g-hot{stroke:#e2691f}
+.dseg.g-alert{stroke:#c93a1c}
+.dseg.g-muted{stroke:rgba(255,255,255,.20)}
+.dneedle{stroke:#fff;stroke-width:2.6;stroke-linecap:round}
+.dhub{fill:#0b0f17;stroke:#fff;stroke-width:2}
+.dhub-core{fill:#fff}
+.dscale{font-size:10px;fill:#67738a;font-variant-numeric:tabular-nums}
+.dial-read{display:flex;align-items:baseline;justify-content:center;gap:2px;margin-top:-2px}
+.dial-read b{font-size:27px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1.12}
+.dial-read .dial-unit{font-size:11.5px;color:var(--dim);font-weight:700}
+.dial-foot{text-align:center;font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.5}
+.dial-note{font-size:11px;color:var(--muted);line-height:1.6;margin-top:8px;border-top:1px solid var(--line-2);padding-top:8px}
+@media (min-width:600px){ .dial-grid{grid-template-columns:repeat(3,1fr)} }
+
 /* ---------- news ---------- */
 .news{display:grid;gap:11px;grid-template-columns:1fr}
 .news-card{

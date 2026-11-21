@@ -266,10 +266,74 @@
     return chartShell(b, inner);
   }
 
+  /* 반원형 계기판(다이얼) — 공포지수·VIX처럼 0~100 감정/변동성 눈금 */
+  function polarPt(cx, cy, r, deg) {
+    var a = deg * Math.PI / 180;
+    return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
+  }
+
+  function arcPath(cx, cy, r, a0, a1) {
+    var p0 = polarPt(cx, cy, r, a0), p1 = polarPt(cx, cy, r, a1);
+    var large = Math.abs(a0 - a1) > 180 ? 1 : 0;
+    return 'M' + p0[0].toFixed(2) + ' ' + p0[1].toFixed(2) +
+      ' A' + r + ' ' + r + ' 0 ' + large + ' 1 ' + p1[0].toFixed(2) + ' ' + p1[1].toFixed(2);
+  }
+
+  function dialGauge(b) {
+    var W = 240, H = 142, cx = 120, cy = 120, r = 92;
+    var cards = (b.items || []).map(function (g) {
+      var min = g.min != null ? g.min : 0;
+      var max = g.max != null ? g.max : 100;
+      var span = (max - min) || 1;
+      var ang = function (v) {
+        var c = Math.max(min, Math.min(max, v));
+        return 180 - (c - min) / span * 180;
+      };
+
+      var prev = min, segs = '';
+      (g.zones || []).forEach(function (z) {
+        var to = z.to != null ? z.to : max;
+        var a0 = ang(prev), a1 = ang(to), pad = 1.3;
+        var s0 = a0 < 179.9 ? a0 - pad : a0;
+        var s1 = a1 > 0.1 ? a1 + pad : a1;
+        if (s0 - s1 > 0.4) {
+          segs += '<path d="' + arcPath(cx, cy, r, s0, s1) + '" class="dseg g-' + esc(z.tone || 'muted') + '"/>';
+        }
+        prev = to;
+      });
+
+      var tip = polarPt(cx, cy, r - 22, ang(g.value));
+      var label = (g.name || '') + ' ' + (g.display != null ? g.display : g.value) + (g.unit || '') + ' ' + (g.status || '');
+      var svg = '<svg class="dial-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(label) + '">' +
+        '<path d="' + arcPath(cx, cy, r, 180, 0) + '" class="dseg-track"/>' + segs +
+        '<line x1="' + cx + '" y1="' + cy + '" x2="' + tip[0].toFixed(2) + '" y2="' + tip[1].toFixed(2) + '" class="dneedle"/>' +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="5.5" class="dhub"/>' +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="2.1" class="dhub-core"/>' +
+        '<text x="' + (cx - r) + '" y="' + (cy + 19) + '" text-anchor="middle" class="dscale">' + esc(g.minLabel != null ? g.minLabel : min) + '</text>' +
+        '<text x="' + (cx + r) + '" y="' + (cy + 19) + '" text-anchor="middle" class="dscale">' + esc(g.maxLabel != null ? g.maxLabel : max) + '</text>' +
+        '</svg>';
+
+      return '<div class="dial">' +
+        '<div class="dial-top"><span class="dial-name">' + esc(g.name) + '</span>' +
+          (g.status ? '<span class="dial-status' + (g.statusTone ? ' t-' + esc(g.statusTone) : '') + '">' + esc(g.status) + '</span>' : '') +
+        '</div>' + svg +
+        '<div class="dial-read"><b' + (g.statusTone ? ' class="t-' + esc(g.statusTone) + '"' : '') + '>' +
+          esc(g.display != null ? g.display : g.value) + '</b>' +
+          (g.unit ? '<span class="dial-unit">' + esc(g.unit) + '</span>' : '') +
+        '</div>' +
+        (g.foot ? '<div class="dial-foot">' + esc(g.foot) + '</div>' : '') +
+        (g.note ? '<p class="dial-note">' + esc(g.note) + '</p>' : '') +
+      '</div>';
+    }).join('');
+
+    return chartShell(b, '<div class="dial-grid">' + cards + '</div>');
+  }
+
   function blockChart(b) {
     if (b.chart === 'line') return lineChart(b);
     if (b.chart === 'bars') return barsChart(b);
     if (b.chart === 'range') return rangeChart(b);
+    if (b.chart === 'gauge') return dialGauge(b);
     return '';
   }
 
