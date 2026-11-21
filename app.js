@@ -58,13 +58,27 @@
 
   function blockCards(b) {
     var items = b.items.map(function (it) {
-      return '<div class="card">' +
-        (it.tag ? '<span class="tag">' + esc(it.tag) + '</span>' : '') +
-        '<h3>' + esc(it.title) + '</h3>' +
+      var head;
+      if (it.sub || it.status) {
+        head = '<div class="card-head">' +
+          (it.tag ? '<span class="tag">' + esc(it.tag) + '</span>' : '') +
+          '<div class="card-headtxt"><h3>' + esc(it.title) + '</h3>' +
+            (it.sub ? '<div class="card-sub">' + esc(it.sub) + '</div>' : '') +
+          '</div>' +
+          (it.status ? '<span class="card-status ' + (it.statusTone ? 't-' + esc(it.statusTone) : '') + '">' + esc(it.status) + '</span>' : '') +
+        '</div>';
+      } else {
+        head = (it.tag ? '<span class="tag">' + esc(it.tag) + '</span>' : '') +
+          '<h3>' + esc(it.title) + '</h3>';
+      }
+      return '<div class="card">' + head +
         (it.lines || []).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') +
       '</div>';
     }).join('');
-    return '<div class="block"><div class="cards' + (b.cols === 3 ? ' c3' : '') + '">' + items + '</div></div>';
+    return '<div class="block">' +
+      (b.title ? '<div class="cards-head"><div class="table-cap">' + esc(b.title) + '</div>' +
+        (b.sub ? '<div class="table-sub">' + esc(b.sub) + '</div>' : '') + '</div>' : '') +
+      '<div class="cards' + (b.cols === 3 ? ' c3' : '') + '">' + items + '</div></div>';
   }
 
   function blockList(b) {
