@@ -720,6 +720,20 @@ def write_outputs(specs, accs, used, names, args, meta_extra=None):
             name, mkt = names.get(code, ("", ""))
             signals[s["id"]].append([dt, code, name, mkt, edt, round(px, 2), r5, r10, r20])
     signals = {k: v for k, v in signals.items() if v}
+
+    # 스크리너 history(data/screener-history.json)와 같은 형태의 보기 — 프리셋별 일자 그룹
+    compat = {}
+    for s in specs:
+        if s["id"] not in ("S1", "S2"):
+            continue
+        days = {}
+        for d in accs[s["id"]].detail:
+            code, dt, edt, px, r5, r10, r20 = d
+            name, mkt = names.get(code, ("", ""))
+            days.setdefault(str(pd.Timestamp(str(dt)).date()), []).append(
+                {"c": code, "n": name, "e": round(px, 2), "r5": r5, "r10": r10, "r20": r20})
+        compat[f"bt-{s['id']}"] = [{"date": k, "rows": v} for k, v in sorted(days.items())]
+
     sig_payload = {
         "meta": {
             "version": 1,
@@ -732,6 +746,9 @@ def write_outputs(specs, accs, used, names, args, meta_extra=None):
             "conditions": [{"id": s["id"], "name": s["name"] if isinstance(s["name"], str) else str(s["name"])} for s in specs],
         },
         "signals": signals,
+        "screener_compatible": {"presetNames": {"bt-S1": "보수형(신고가&시장필터&외국인&정배열)",
+                                                "bt-S2": "공격형(신고가&시장필터)"},
+                                "presets": compat},
     }
     OUT_SIGNALS.write_text(json.dumps(sig_payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
