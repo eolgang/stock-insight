@@ -16,6 +16,9 @@ data/insights.json  ★ 모든 콘텐츠(수치·표·뉴스·주석)는 이 파
 data/screener*.json 조건검색 스캔 결과·성과 히스토리 (scripts/scan_krx.py가 생성)
 data/ma-charts.json 종목 차트용 일봉·이동평균 (scripts/scan_krx.py가 생성)
 scripts/scan_krx.py 장마감 조건검색 스캐너
+money-flow.js/css   “경제 인사이트” 탭(자산별 자금 흐름·한국 부동산, data/money-flow.json을 읽음)
+data/money-flow.json 자금 흐름 스냅숏 누적(주 1회 갱신, 스키마는 docs/money-flow-schema.md)
+data/money-flow.sample.json 실제 스냅숏이 없을 때만 쓰는 예시(코인·korea_property 포함)
 chart-inbox.js/css  “차트 분석 맡기기” 업로드 버튼(플로팅 + · GitHub Contents API 커밋)
 inbox/              업로드된 차트 캡처·메모(페이지에서 자동 커밋)
 favicon.svg         아이콘
@@ -37,6 +40,7 @@ favicon.svg         아이콘
 | 탭 | 내용 |
 |---|---|
 | 시장 브리핑 | 11/20 마감 지수·지지선 표, 거장들의 매크로 신호등(공포·탐욕/VIX/10년물 원형 계기판 + 지표별 카드·기준선 표), 10년물 월별 차트, 고점 대비 낙폭 차트, 5% 금리 이력, 일정 |
+| 경제 인사이트 | 자산별 자금 흐름(미국·한국 주식, 채권, 머니마켓, 금, 원자재, 부동산, 코인, 달러) + 국면 배지 + 매집/대피 신호 + 서울·수도권 부동산 매물·주간 가격·전세가율 + 스냅숏 기록 (매주 일요일 아침 갱신) |
 | 관심종목 | 주간 스윙 후보(매주 일요일 20:00 갱신 · 최근 4주 롤링 추적) + 테마별 추적 종목 카드/요약 표 |
 | 조건검색 | 장마감 확정 데이터 자동 스캔(20일선 돌파·52주 신고가·수급 포착·눌림목) + 조건별 적중률, 종목 클릭 시 5·20·60·120·240·360·480·720일선 차트 |
 | 실시간 차트 | TradingView 위젯 + 종목 전환(NVDA·TSLA·TSM·AVGO·APH·SPY·QQQ·삼성전자·SK하이닉스·금), 20·200일선 |
@@ -45,6 +49,15 @@ favicon.svg         아이콘
 | 손익 계산기 | 평단가·목표가·손절가·손익비 실시간 계산(원/달러) |
 | 폭등 징표 | 테슬라 vs 엔비디아 비교, 공통 징표, 가짜 신호 반례, 13F 시차 |
 | 13F 수급 | 2026 Q3 5사 수급, AI 병목주·암페놀 액면분할 주의 |
+
+## 경제 인사이트 (자금 흐름)
+
+`data/money-flow.json` 한 파일만 읽는다. 파일이 없거나 깨지면 `data/money-flow.sample.json`으로 화면을 채우고 상단에 “예시 데이터”라고 표시한다.
+
+- 계약: `as_of`, `regime{label,note}`, `assets[{name,flow_label,flow_value,flow_unit,ytd_return,source_url}]`, `signals[{name,value,direction,interpretation}]`, `korea_property{listings,price,jeonse_ratio,source_urls}`, `history[]`(최신이 마지막)
+- `direction`은 `매집`/`대피`/`중립`, `flow_unit`은 `USD`/`KRW`(달러처럼 가격 변동을 쓰는 항목은 `%`)
+- 예전 스키마(`regime.verdict`, `flow_usd_or_krw` 문자열, `direction 개선/악화`)도 함께 읽는다. 둘 다 있으면 `flow_value`를 계산에, `flow_usd_or_krw`를 표시에 쓴다.
+- 자산·부동산·신호·history 어느 값이 빠져도 그 블록만 “데이터 없음”으로 두고 나머지는 그린다.
 
 ## 조건검색 스캐너
 

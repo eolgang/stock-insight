@@ -1,0 +1,204 @@
+{
+  "sample": true,
+  "as_of": "2026-11-21",
+  "regime": {
+    "label": "조정",
+    "note": "코스피 주간 -5.2%, S&P 500 -2.9% — 지수는 밀리는데 머니마켓·채권으로는 자금이 들어오는 국면(예시 데이터)."
+  },
+  "assets": [
+    {
+      "name": "미국주식",
+      "flow_label": "순유출",
+      "flow_value": -18400000000,
+      "flow_unit": "USD",
+      "ytd_return": 12.4,
+      "source_url": "https://www.ici.org/research/stats/etf"
+    },
+    {
+      "name": "한국주식",
+      "flow_label": "순유출",
+      "flow_value": -2350000000000,
+      "flow_unit": "KRW",
+      "ytd_return": 21.6,
+      "source_url": "https://data.krx.co.kr/"
+    },
+    {
+      "name": "채권",
+      "flow_label": "순유입",
+      "flow_value": 12600000000,
+      "flow_unit": "USD",
+      "ytd_return": 3.1,
+      "source_url": "https://www.ici.org/research/stats/etf"
+    },
+    {
+      "name": "머니마켓",
+      "flow_label": "순유입",
+      "flow_value": 54200000000,
+      "flow_unit": "USD",
+      "ytd_return": 0.9,
+      "source_url": "https://www.ici.org/research/stats/mmf"
+    },
+    {
+      "name": "금",
+      "flow_label": "순유출",
+      "flow_value": -3200000000,
+      "flow_unit": "USD",
+      "ytd_return": 31.8,
+      "source_url": "https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows"
+    },
+    {
+      "name": "원자재",
+      "flow_label": "순유출",
+      "flow_value": -1100000000,
+      "flow_unit": "USD",
+      "ytd_return": 6.2,
+      "source_url": "https://www.ici.org/research/stats/etf"
+    },
+    {
+      "name": "부동산(리츠)",
+      "flow_label": "순유출",
+      "flow_value": -900000000,
+      "flow_unit": "USD",
+      "ytd_return": -4.8,
+      "source_url": "https://www.reit.com/data-research"
+    },
+    {
+      "name": "코인(비트코인·이더리움)",
+      "flow_label": "순유출",
+      "flow_value": -4600000000,
+      "flow_unit": "USD",
+      "ytd_return": -12.8,
+      "source_url": "https://www.coinshares.com/insights/digital-asset-fund-flows"
+    },
+    {
+      "name": "달러",
+      "flow_label": "순유입",
+      "flow_value": 2400000000,
+      "flow_unit": "USD",
+      "ytd_return": -3.4,
+      "source_url": "https://www.federalreserve.gov/releases/h10/"
+    }
+  ],
+  "signals": [
+    {
+      "name": "머니마켓펀드(MMF) 잔액",
+      "value": "$7.42조 · 사상 최고",
+      "direction": "매집",
+      "interpretation": "현금성 대기 자금이 최고치. 반등 시 실탄이 되지만, 아직 시장에 들어오지 않았다는 뜻이기도 하다."
+    },
+    {
+      "name": "주식형 대비 채권형 ETF 유입",
+      "value": "1 : 2.8 (4주)",
+      "direction": "대피",
+      "interpretation": "안전자산 유입이 주식 유출의 2.8배. 매도 규모보다 대피 속도가 빠른 국면."
+    },
+    {
+      "name": "CNN 공포·탐욕 지수",
+      "value": "10 · 극단적 공포",
+      "direction": "매집",
+      "interpretation": "10 이하는 과거 3개월 뒤 반등 확률이 높았던 구간. 다만 바닥 확정 신호는 아니다."
+    },
+    {
+      "name": "하이일드 스프레드",
+      "value": "412bp (+38bp/2주)",
+      "direction": "대피",
+      "interpretation": "신용 스프레드가 벌어지는 중. 주식 바닥보다 먼저 꺾이는 지표라 추세 확인이 필요하다."
+    },
+    {
+      "name": "코스피 외국인 순매수",
+      "value": "-1.8조 (5일)",
+      "direction": "중립",
+      "interpretation": "순매도 지속이지만 규모는 줄어드는 중. 순매수 전환이 다음 스냅숏의 핵심."
+    }
+  ],
+  "korea_property": {
+    "as_of": "2026-11-20",
+    "listings": {
+      "seoul": 87400,
+      "metro": 246800,
+      "direction": "증가",
+      "note": "전주 대비 서울 +3.2%, 수도권 +2.8% (예시)"
+    },
+    "price": {
+      "seoul_weekly": 0.05,
+      "metro_weekly": 0.02,
+      "note": "주간 아파트 매매가격지수 변동률 % (예시)"
+    },
+    "jeonse_ratio": 66.4,
+    "source_urls": [
+      "https://www.reb.or.kr/r-one/",
+      "https://land.naver.com/"
+    ]
+  },
+  "history": [
+    {
+      "as_of": "2026-11-07",
+      "regime": { "label": "상승", "note": "지수 신고가 부근, 위험자산으로 자금 유입(예시)." },
+      "assets": [
+        { "name": "미국주식", "flow_label": "순유입", "flow_value": 6400000000, "flow_unit": "USD", "ytd_return": 17.9, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "한국주식", "flow_label": "순유입", "flow_value": 800000000000, "flow_unit": "KRW", "ytd_return": 34.2, "source_url": "https://data.krx.co.kr/" },
+        { "name": "채권", "flow_label": "순유출", "flow_value": -2100000000, "flow_unit": "USD", "ytd_return": 2.4, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "머니마켓", "flow_label": "순유출", "flow_value": -4200000000, "flow_unit": "USD", "ytd_return": 0.8, "source_url": "https://www.ici.org/research/stats/mmf" },
+        { "name": "금", "flow_label": "순유출", "flow_value": -800000000, "flow_unit": "USD", "ytd_return": 38.1, "source_url": "https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows" },
+        { "name": "원자재", "flow_label": "순유입", "flow_value": 300000000, "flow_unit": "USD", "ytd_return": 8.4, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "부동산(리츠)", "flow_label": "순유입", "flow_value": 200000000, "flow_unit": "USD", "ytd_return": -1.2, "source_url": "https://www.reit.com/data-research" },
+        { "name": "코인(비트코인·이더리움)", "flow_label": "순유입", "flow_value": 2100000000, "flow_unit": "USD", "ytd_return": 6.4, "source_url": "https://www.coinshares.com/insights/digital-asset-fund-flows" },
+        { "name": "달러", "flow_label": "순유출", "flow_value": -600000000, "flow_unit": "USD", "ytd_return": -2.1, "source_url": "https://www.federalreserve.gov/releases/h10/" }
+      ],
+      "korea_property": {
+        "as_of": "2026-11-06",
+        "listings": { "seoul": 82300, "metro": 235600, "direction": "보합", "note": "전주 대비 서울 +0.4% (예시)" },
+        "price": { "seoul_weekly": 0.11, "metro_weekly": 0.06, "note": "주간 변동률 % (예시)" },
+        "jeonse_ratio": 67.1,
+        "source_urls": ["https://www.reb.or.kr/r-one/"]
+      }
+    },
+    {
+      "as_of": "2026-11-14",
+      "regime": { "label": "조정", "note": "지수 첫 조정, 금으로 피신 시작(예시)." },
+      "assets": [
+        { "name": "미국주식", "flow_label": "순유출", "flow_value": -9800000000, "flow_unit": "USD", "ytd_return": 15.6, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "한국주식", "flow_label": "순유출", "flow_value": -1100000000000, "flow_unit": "KRW", "ytd_return": 27.4, "source_url": "https://data.krx.co.kr/" },
+        { "name": "채권", "flow_label": "순유입", "flow_value": 6200000000, "flow_unit": "USD", "ytd_return": 2.8, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "머니마켓", "flow_label": "순유입", "flow_value": 28400000000, "flow_unit": "USD", "ytd_return": 0.9, "source_url": "https://www.ici.org/research/stats/mmf" },
+        { "name": "금", "flow_label": "순유입", "flow_value": 1600000000, "flow_unit": "USD", "ytd_return": 34.6, "source_url": "https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows" },
+        { "name": "원자재", "flow_label": "순유출", "flow_value": -400000000, "flow_unit": "USD", "ytd_return": 7.1, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "부동산(리츠)", "flow_label": "순유출", "flow_value": -500000000, "flow_unit": "USD", "ytd_return": -3.1, "source_url": "https://www.reit.com/data-research" },
+        { "name": "코인(비트코인·이더리움)", "flow_label": "순유출", "flow_value": -700000000, "flow_unit": "USD", "ytd_return": -2.4, "source_url": "https://www.coinshares.com/insights/digital-asset-fund-flows" },
+        { "name": "달러", "flow_label": "순유입", "flow_value": 1100000000, "flow_unit": "USD", "ytd_return": -2.8, "source_url": "https://www.federalreserve.gov/releases/h10/" }
+      ],
+      "korea_property": {
+        "as_of": "2026-11-13",
+        "listings": { "seoul": 84700, "metro": 240100, "direction": "증가", "note": "전주 대비 서울 +2.9% (예시)" },
+        "price": { "seoul_weekly": 0.08, "metro_weekly": 0.04, "note": "주간 변동률 % (예시)" },
+        "jeonse_ratio": 66.8,
+        "source_urls": ["https://www.reb.or.kr/r-one/"]
+      }
+    },
+    {
+      "as_of": "2026-11-21",
+      "regime": {
+        "label": "조정",
+        "note": "코스피 주간 -5.2%, S&P 500 -2.9% — 지수는 밀리는데 머니마켓·채권으로는 자금이 들어오는 국면(예시 데이터)."
+      },
+      "assets": [
+        { "name": "미국주식", "flow_label": "순유출", "flow_value": -18400000000, "flow_unit": "USD", "ytd_return": 12.4, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "한국주식", "flow_label": "순유출", "flow_value": -2350000000000, "flow_unit": "KRW", "ytd_return": 21.6, "source_url": "https://data.krx.co.kr/" },
+        { "name": "채권", "flow_label": "순유입", "flow_value": 12600000000, "flow_unit": "USD", "ytd_return": 3.1, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "머니마켓", "flow_label": "순유입", "flow_value": 54200000000, "flow_unit": "USD", "ytd_return": 0.9, "source_url": "https://www.ici.org/research/stats/mmf" },
+        { "name": "금", "flow_label": "순유출", "flow_value": -3200000000, "flow_unit": "USD", "ytd_return": 31.8, "source_url": "https://www.gold.org/goldhub/data/gold-etfs-holdings-and-flows" },
+        { "name": "원자재", "flow_label": "순유출", "flow_value": -1100000000, "flow_unit": "USD", "ytd_return": 6.2, "source_url": "https://www.ici.org/research/stats/etf" },
+        { "name": "부동산(리츠)", "flow_label": "순유출", "flow_value": -900000000, "flow_unit": "USD", "ytd_return": -4.8, "source_url": "https://www.reit.com/data-research" },
+        { "name": "코인(비트코인·이더리움)", "flow_label": "순유출", "flow_value": -4600000000, "flow_unit": "USD", "ytd_return": -12.8, "source_url": "https://www.coinshares.com/insights/digital-asset-fund-flows" },
+        { "name": "달러", "flow_label": "순유입", "flow_value": 2400000000, "flow_unit": "USD", "ytd_return": -3.4, "source_url": "https://www.federalreserve.gov/releases/h10/" }
+      ],
+      "korea_property": {
+        "as_of": "2026-11-20",
+        "listings": { "seoul": 87400, "metro": 246800, "direction": "증가", "note": "전주 대비 서울 +3.2%, 수도권 +2.8% (예시)" },
+        "price": { "seoul_weekly": 0.05, "metro_weekly": 0.02, "note": "주간 아파트 매매가격지수 변동률 % (예시)" },
+        "jeonse_ratio": 66.4,
+        "source_urls": ["https://www.reb.or.kr/r-one/", "https://land.naver.com/"]
+      }
+    }
+  ]
+}

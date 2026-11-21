@@ -1427,6 +1427,7 @@
       case 'simulator': return blockSimulator(b);
       case 'tvTimeline': return blockTVTimeline(b);
       case 'screener': return blockScreener(b);
+      case 'moneyFlow': return (window.EolmiMoneyFlow && window.EolmiMoneyFlow.html()) || '';
       default: return '';
     }
   }
@@ -1455,6 +1456,7 @@
     var tl = section.blocks.filter(function (b) { return b.type === 'tvTimeline'; })[0];
     if (tl) mountTimeline(tl);
     if (section.blocks.filter(function (b) { return b.type === 'screener'; }).length) mountScreener();
+    if (section.blocks.filter(function (b) { return b.type === 'moneyFlow'; }).length && window.EolmiMoneyFlow) window.EolmiMoneyFlow.mount();
   }
 
   function setTab(id, push) {
@@ -1577,6 +1579,7 @@
       })
       .then(function (data) {
         DATA = data;
+        if (window.EolmiMoneyFlow) window.EolmiMoneyFlow.attach(DATA);
         applyBrand(data);
         buildHero(data);
         buildTabs(data.sections);
