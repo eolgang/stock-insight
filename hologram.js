@@ -21,6 +21,7 @@ const fmt = (s) => {
   return m + ':' + String(r).padStart(2, '0');
 };
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const GATE_START = 0;   /* 단계 패널 본문 페이드 게이트 초기값 (입자 테두리 조립 후 열린다) */
 
 const voiceEl = $('voice');
 const state = {
@@ -482,25 +483,26 @@ function initScene(T) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhone ? 1.7 : 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9;
+  renderer.toneMappingExposure = 0.92;
   renderer.outputColorSpace = T.SRGBColorSpace;
 
   const scene = new T.Scene();
-  scene.background = new T.Color(0x020906);
+  scene.background = new T.Color(0x010605);
 
   const FOV = 42;
   const camera = new T.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 0.1, 200);
   const layout = { d: 6, frac: 0.5, aspect: 1.6, w: 1, h: 1 };
-  const pointer = { x: 0, y: 0 };
+  const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
 
-  /* ---------- 배경 셰이더: 깊은 공간 + 지평선 + 물결 반사 ---------- */
+  /* ---------- 배경: 딥블랙 · 코어 주변만 옅은 빛 · 하단은 순수 여백 ---------- */
   const bgU = {
     uRes: { value: new T.Vector2(1, 1) },
     uTime: { value: 0 },
     uLevel: { value: 0 },
+    uConv: { value: 0 },
     uCoreX: { value: 0.5 },
     uCoreY: { value: 0.42 },
-    uHorizon: { value: 0.68 },
+    uHorizon: { value: 0.72 },
     uAccent: { value: new T.Color(0x7cf5c8) },
   };
   const bgMat = new T.ShaderMaterial({
@@ -518,11 +520,14 @@ function initScene(T) {
       uniform vec2 uRes;
       uniform float uTime;
       uniform float uLevel;
+      uniform float uConv;
       uniform float uCoreX;
       uniform float uCoreY;
       uniform float uHorizon;
       uniform vec3 uAccent;
       varying vec2 vUv;
+
+      float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
       void main(){
         float y = 1.0 - vUv.y;
@@ -531,48 +536,20 @@ function initScene(T) {
         vec2 cp = vec2((x - uCoreX) * aspect, y - uCoreY);
         float cd = length(cp);
 
-        vec3 top = vec3(0.0012, 0.0052, 0.0042);
-        vec3 mid = vec3(0.0040, 0.0190, 0.0150);
-        vec3 bot = vec3(0.0008, 0.0032, 0.0028);
-        vec3 col = mix(top, mid, smoothstep(0.0, uHorizon, y));
-        col = mix(col, bot, smoothstep(uHorizon, min(1.0, uHorizon + 0.34), y));
+        /* 딥블랙 바탕 + 코어 뒤 아주 옅은 볼륨 */
+        vec3 col = vec3(0.0006, 0.0017, 0.0016);
+        col += uAccent * exp(-cd * 2.3) * 0.0115;
+        col += uAccent * exp(-cd * 5.6) * (0.014 + 0.032 * uLevel + 0.024 * uConv);
+        col += vec3(0.008, 0.024, 0.022) * exp(-cd * 1.15) * 0.55;
 
-        col += vec3(0.006, 0.030, 0.024) * exp(-abs(y - uHorizon) * 7.0);
+        /* 아래로 갈수록 조용한 딥블랙 (장식 없음) */
+        col *= smoothstep(1.0, 0.34, y) * 0.96 + 0.04;
 
-        col += uAccent * exp(-cd * 4.6) * (0.026 + 0.055 * uLevel);
-        col += uAccent * exp(-cd * 1.9) * 0.010;
+        /* 하단은 아무 장식도 두지 않는다 (딥블랙 여백) */
 
-        float py = max(0.0, abs(y - uHorizon) * uRes.y - 0.5);
-        float line = exp(-py * 1.9);
-        float glow = exp(-py * 0.045);
-        float edge = smoothstep(0.0, 0.09, x) * (1.0 - smoothstep(0.91, 1.0, x));
-        col += uAccent * line * 0.62 * edge;
-        col += uAccent * glow * 0.040 * edge;
-
-        if (y > uHorizon) {
-          float d = y - uHorizon;
-          float fade = exp(-d * 7.5);
-          float cx = (x - 0.5) * 2.3;
-          float mask = exp(-cx * cx * 1.35);
-          float w = 0.0;
-          for (int i = 0; i < 6; i++) {
-            float k = float(i);
-            float yy = uHorizon + 0.012 + k * 0.026;
-            float amp = (0.0018 + 0.0009 * k) * (1.0 + 3.2 * uLevel);
-            float ph = uTime * (0.55 + 0.13 * k) + k * 1.7;
-            float wob = sin(x * 15.0 + ph) * amp + sin(x * 6.3 - ph * 0.8 + k) * amp * 0.75;
-            float dd = abs(y - (yy + wob)) * uRes.y;
-            w += (1.0 - smoothstep(0.15, 1.7, dd)) * (0.30 - 0.036 * k);
-          }
-          col += mix(uAccent, vec3(0.32, 0.85, 1.0), 0.25) * w * mask * fade * (0.30 + 0.65 * uLevel);
-
-          float rx = (x - 0.5) * 2.3;
-          float refl = exp(-rx * rx * 2.4) * exp(-d * 10.0);
-          col += uAccent * refl * (0.06 + 0.20 * uLevel);
-        }
-
-        float g = fract(sin(dot(vUv * uRes, vec2(12.9898, 78.233))) * 43758.5453);
-        col += (g - 0.5) * 0.005;
+        /* 필름 그레인 */
+        float g = hash21(vUv * uRes + fract(uTime * 0.37) * 53.0);
+        col += (g - 0.5) * 0.0038;
 
         gl_FragColor = vec4(max(col, 0.0), 1.0);
       }`,
@@ -679,10 +656,10 @@ function initScene(T) {
         }`,
     });
   }
-  const wire1 = new T.LineSegments(new T.WireframeGeometry(new T.IcosahedronGeometry(1.012, 2)), wireMat(0.34, 1.0));
+  const wire1 = new T.LineSegments(new T.WireframeGeometry(new T.IcosahedronGeometry(1.012, 2)), wireMat(0.27, 1.0));
   core.add(wire1);
 
-  const wire2 = new T.LineSegments(new T.WireframeGeometry(new T.IcosahedronGeometry(1.08, 3)), wireMat(0.09, 0.55));
+  const wire2 = new T.LineSegments(new T.WireframeGeometry(new T.IcosahedronGeometry(1.08, 3)), wireMat(0.055, 0.55));
   core.add(wire2);
 
   /* 내부 연결 코드(대각선 네트워크) + 노드 */
@@ -734,63 +711,647 @@ function initScene(T) {
   );
   core.add(innerOcta);
 
-  /* 분할 아크 + 방사형 눈금 링 */
-  const rings = [];
-  function ringLayer(cfg) {
-    const g = new T.Group();
-    g.rotation.set(cfg.tilt[0], cfg.tilt[1], cfg.tilt[2]);
-    const mat = new T.MeshBasicMaterial({
-      color: 0x7cf5c8, transparent: true, opacity: cfg.op,
-      blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide,
-    });
-    cfg.arcs.forEach(([from, len]) => {
-      const geo = new T.RingGeometry(cfg.r, cfg.r + cfg.thick, 128, 1, from, len);
-      g.add(new T.Mesh(geo, mat));
-    });
-    if (cfg.ticks) {
-      const tickGeo = new T.BoxGeometry(0.0055, cfg.tickLen, 0.0055);
-      const tickMat = new T.MeshBasicMaterial({
-        color: 0x7cf5c8, transparent: true, opacity: cfg.op * 0.85,
-        blending: T.AdditiveBlending, depthWrite: false,
-      });
-      for (let i = 0; i < cfg.ticks; i++) {
-        const a = (i / cfg.ticks) * Math.PI * 2;
-        const len = cfg.tickLen * (i % 5 === 0 ? 2.0 : 1);
-        const m = new T.Mesh(tickGeo, tickMat);
-        m.scale.y = len / cfg.tickLen;
-        m.position.set(Math.cos(a) * (cfg.r + 0.035), Math.sin(a) * (cfg.r + 0.035), 0);
-        m.rotation.z = a - Math.PI / 2;
-        g.add(m);
+  /* =============================================================
+     링 시스템 — 균일한 선 원이 아니라, 불규칙하게 끊긴 빛의 호
+     · 세그먼트마다 길이·두께·밝기·기울기 다름
+     · 밝은 머리 → 꼬리로 꺼지는 그라디언트, 끝은 뾰족하게 taper
+     · 깊이(코어 앞/뒤)에 따라 밝기 변화 → 코어를 감싸 도는 입체감
+     · 일정 각속도 대신 아주 느리게 흔들리는 속도, 단계 전환 시 벌어졌다 조여듦
+     ============================================================= */
+  const ringUniforms = {
+    uTime: coreU.uTime,
+    uAccent: coreU.uAccent,
+    uLevel: coreU.uLevel,
+    uCoreZ: { value: -6 },
+    uRingDim: { value: 1 },
+  };
+
+  function arcBandGeometry(o) {
+    const N = o.segs || 110;
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const a = o.from + o.len * u;
+      const taper = Math.pow(Math.max(0.0001, Math.sin(Math.PI * u)), o.taperPow == null ? 0.6 : o.taperPow);
+      const th = o.thick * (0.16 + 0.84 * taper);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const z = Math.sin(u * Math.PI * o.waves + o.wavePhase) * o.bulge;
+      for (let k = 0; k < 2; k++) {
+        const rr = o.r + (k === 0 ? -th * 0.5 : th * 0.5);
+        pos.push(ca * rr, sa * rr, z);
+        uv.push(u, k);
       }
     }
-    core.add(g);
-    rings.push({ g, cfg, mat, t: Math.random() * 6 });
+    for (let i = 0; i < N; i++) {
+      const a0 = i * 2, b0 = a0 + 1, a1 = a0 + 2, b1 = a0 + 3;
+      idx.push(a0, b0, a1, b0, b1, a1);
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
     return g;
   }
-  ringLayer({ r: 1.15, thick: 0.0035, tilt: [1.44, 0.10, 0], speed: 0.20, op: 0.6, arcs: [[0.15, 1.05], [2.35, 0.75], [4.05, 1.15]] });
-  ringLayer({ r: 1.29, thick: 0.0030, tilt: [1.22, 0.42, 0.35], speed: -0.15, op: 0.36, arcs: [[0.4, 1.95], [3.1, 1.35]], ticks: 34, tickLen: 0.045 });
-  ringLayer({ r: 1.38, thick: 0.0026, tilt: [0.50, 0.66, 0.42], speed: 0.09, op: 0.12, arcs: [[0.9, 2.5], [4.3, 0.8]] });
-  ringLayer({ r: 1.04, thick: 0.0022, tilt: [1.50, 0.04, 0.18], speed: -0.06, op: 0.22, arcs: [[0, 4.6]] });
 
-  /* 떠다니는 입자 */
-  const PC = reduced ? 180 : (isPhone ? 420 : 720);
-  const pGeo = new T.BufferGeometry();
-  const pPos = new Float32Array(PC * 3);
-  const pSeed = new Float32Array(PC);
-  for (let i = 0; i < PC; i++) {
-    const d = randomDir(T);
-    const r = 1.05 + Math.pow(Math.random(), 0.6) * 1.5;
-    pPos[i * 3] = d.x * r;
-    pPos[i * 3 + 1] = d.y * r;
-    pPos[i * 3 + 2] = d.z * r;
-    pSeed[i] = 0.3 + Math.random() * 0.9;
+  function arcMat(opts) {
+    return new T.ShaderMaterial({
+      uniforms: {
+        uTime: ringUniforms.uTime,
+        uAccent: ringUniforms.uAccent,
+        uLevel: ringUniforms.uLevel,
+        uCoreZ: ringUniforms.uCoreZ,
+        uRingDim: ringUniforms.uRingDim,
+        uAlpha: { value: opts.alpha },
+        uSeed: { value: opts.seed },
+        uDir: { value: opts.dir },
+        uWave: { value: opts.wave },
+        uWaveAmt: { value: opts.waveAmt },
+      },
+      transparent: true,
+      depthWrite: false,
+      side: T.DoubleSide,
+      blending: T.AdditiveBlending,
+      vertexShader: `
+        uniform float uTime;
+        uniform float uSeed;
+        uniform float uWave;
+        uniform float uWaveAmt;
+        varying float vU;
+        varying float vV;
+        varying float vZ;
+        varying vec3 vN;
+        varying vec3 vVw;
+        void main(){
+          vU = uv.x;
+          vV = uv.y;
+          vec3 p = position;
+          p.z += sin(uv.x * uWave * 6.2831 + uTime * 0.42 + uSeed * 6.2831) * uWaveAmt;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          vZ = mv.z;
+          vN = normalize(normalMatrix * vec3(0.0, 0.0, 1.0));
+          vVw = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        precision highp float;
+        uniform vec3 uAccent;
+        uniform float uAlpha;
+        uniform float uTime;
+        uniform float uSeed;
+        uniform float uCoreZ;
+        uniform float uLevel;
+        uniform float uRingDim;
+        uniform float uDir;
+        varying float vU;
+        varying float vV;
+        varying float vZ;
+        varying vec3 vN;
+        varying vec3 vVw;
+        void main(){
+          /* 폭 방향: 선명한 중심선 + 그 뒤로 번지는 빛 (홀로그램 기기 느낌) */
+          float band = smoothstep(0.0, 0.40, vV) * (1.0 - smoothstep(0.60, 1.0, vV));
+          float lineC = exp(-pow((vV - 0.5) * 6.2, 2.0));
+
+          /* 길이 방향: 머리는 밝고 꼬리는 꺼지듯 */
+          float uu = uDir > 0.0 ? vU : 1.0 - vU;
+          float head = pow(smoothstep(0.0, 1.0, uu), 1.15);
+
+          /* 아주 느린 호흡 + 흐르는 결 */
+          float breathe = 0.80 + 0.20 * sin(uu * 4.2 - uTime * 0.55 + uSeed * 6.2831);
+          float streak = 0.88 + 0.12 * sin(uu * 38.0 + uTime * 0.9 + uSeed * 12.0);
+
+          float a = (band * 0.20 + lineC * 0.95) * (0.05 + 0.95 * head) * breathe * streak * uAlpha;
+
+          /* 깊이: 코어 뒤로 돌면 어둡고, 앞으로 나오면 밝다 */
+          float dm = smoothstep(uCoreZ - 0.80, uCoreZ + 0.80, vZ);
+          a *= mix(0.16, 1.0, dm);
+
+          /* 프레넬: 비껴 보이는 부분은 진하게, 정면은 옅게 */
+          float face = abs(dot(vN, vVw));
+          a *= mix(1.25, 0.72, face);
+
+          a *= 0.88 + 0.32 * uLevel;
+          a *= uRingDim;
+
+          vec3 c = mix(uAccent, vec3(0.78, 0.99, 0.96), 0.16 + 0.46 * head);
+          gl_FragColor = vec4(c, clamp(a, 0.0, 1.0));
+        }`,
+    });
   }
-  pGeo.setAttribute('position', new T.BufferAttribute(pPos, 3));
-  const particles = new T.Points(pGeo, new T.PointsMaterial({
-    size: 0.012, map: dotTexture(T), color: 0xa9ffe4, transparent: true, opacity: 0.42,
-    blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+
+  const tickMatFor = (seed) => new T.ShaderMaterial({
+    uniforms: {
+      uColor: ringUniforms.uAccent,
+      uLevel: ringUniforms.uLevel,
+      uCoreZ: ringUniforms.uCoreZ,
+      uRingDim: ringUniforms.uRingDim,
+      uAlpha: { value: 0.55 + seed * 0.45 },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: T.DoubleSide,
+    blending: T.AdditiveBlending,
+    vertexShader: `
+      attribute float aAlpha;
+      varying float vA;
+      varying float vZ;
+      void main(){
+        vA = aAlpha;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vZ = mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uLevel;
+      uniform float uCoreZ;
+      uniform float uRingDim;
+      uniform float uAlpha;
+      varying float vA;
+      varying float vZ;
+      void main(){
+        float dm = smoothstep(uCoreZ - 0.80, uCoreZ + 0.80, vZ);
+        float a = vA * uAlpha * uRingDim * mix(0.18, 1.0, dm) * (0.8 + 0.4 * uLevel);
+        gl_FragColor = vec4(uColor, clamp(a, 0.0, 1.0));
+      }`,
+  });
+
+  const ringSys = [];
+  const ringDefs = [
+    { r: 1.07, thick: 0.026, tilt: [0.84, 0.08, 0.05], w: 0.155, op: 0.95, parts: 7, cover: 0.62, wob: 0.008, ticks: 30, tickR: 0.02 },
+    { r: 1.19, thick: 0.022, tilt: [0.80, 0.22, 0.30], w: -0.115, op: 0.72, parts: 8, cover: 0.54, wob: 0.009, ticks: 24, tickR: 0.014 },
+    { r: 1.31, thick: 0.017, tilt: [0.87, 0.12, 0.58], w: 0.075, op: 0.48, parts: 6, cover: 0.46, wob: 0.010, ticks: 0, tickR: 0 },
+    { r: 1.43, thick: 0.013, tilt: [0.76, 0.28, 0.16], w: -0.05, op: 0.22, parts: 5, cover: 0.40, wob: 0.012, ticks: 14, tickR: 0.008 },
+  ];
+
+  ringDefs.forEach((def, ri) => {
+    const g = new T.Group();
+    g.rotation.set(def.tilt[0], def.tilt[1], def.tilt[2]);
+    core.add(g);
+
+    const segs = [];
+    let a0 = Math.random() * Math.PI * 2;
+    const total = Math.PI * 2 * def.cover;
+    const raw = [];
+    for (let k = 0; k < def.parts; k++) raw.push(0.5 + Math.random() * 1.1);
+    const sum = raw.reduce((x, y) => x + y, 0);
+
+    for (let k = 0; k < def.parts; k++) {
+      const len = total * (raw[k] / sum);
+      const gap = ((Math.PI * 2 - total) / def.parts) * (0.45 + Math.random() * 1.35);
+      const geo = arcBandGeometry({
+        r: def.r * (0.985 + Math.random() * 0.03),
+        thick: def.thick * (0.75 + Math.random() * 0.6),
+        from: a0,
+        len,
+        segs: isPhone ? 74 : 120,
+        bulge: def.wob * (0.2 + Math.random() * 0.6),
+        wavePhase: Math.random() * 6.28,
+        waves: 1.1 + Math.random() * 2.2,
+        taperPow: 0.30 + Math.random() * 0.25,
+      });
+      const mesh = new T.Mesh(geo, arcMat({
+        alpha: def.op * (0.62 + Math.random() * 0.7),
+        seed: Math.random(),
+        dir: def.w >= 0 ? 1 : -1,
+        wave: 0.6 + Math.random() * 1.4,
+        waveAmt: def.wob * (0.16 + Math.random() * 0.3),
+      }));
+      mesh.userData = {
+        amp: 0.004 + Math.random() * 0.016,
+        ph: Math.random() * 6.28,
+        k: 0.055 + Math.random() * 0.10,
+        exK: (Math.random() - 0.5) * 0.16,
+      };
+      g.add(mesh);
+      segs.push(mesh);
+      a0 += len + gap;
+    }
+
+    /* 눈금: 개수·길이·밝기를 불규칙하게 흩뿌린다 */
+    if (def.ticks) {
+      const tp = [], ta = [], ti = [];
+      let vc = 0;
+      const n = def.ticks;
+      for (let i = 0; i < n; i++) {
+        if (Math.random() < 0.3) continue;
+        const ang = (i / n) * Math.PI * 2 + (Math.random() - 0.5) * 0.06;
+        const len = def.thick * (2.0 + Math.random() * 8.5);
+        const wdt = 0.0012 + Math.random() * 0.0024;
+        const rr = def.r + def.thick * (1.6 + Math.random() * 3.2);
+        const ca = Math.cos(ang), sa = Math.sin(ang);
+        const nx = -sa * wdt, ny = ca * wdt;
+        const x0 = ca * rr, y0 = sa * rr;
+        const x1 = ca * (rr + len), y1 = sa * (rr + len);
+        const al = 0.2 + Math.random() * 0.8;
+        tp.push(x0 - nx, y0 - ny, 0, x0 + nx, y0 + ny, 0, x1 + nx, y1 + ny, 0, x1 - nx, y1 - ny, 0);
+        ta.push(al, al, 0.0, 0.0);
+        ti.push(vc, vc + 1, vc + 2, vc, vc + 2, vc + 3);
+        vc += 4;
+      }
+      if (vc) {
+        const tg = new T.BufferGeometry();
+        tg.setAttribute('position', new T.Float32BufferAttribute(tp, 3));
+        tg.setAttribute('aAlpha', new T.Float32BufferAttribute(ta, 1));
+        tg.setIndex(ti);
+        g.add(new T.Mesh(tg, tickMatFor(Math.random())));
+      }
+    }
+
+    ringSys.push({ g, def, segs, ang: Math.random() * 6.28, phase: Math.random() * 12 });
+  });
+
+  /* =============================================================
+     에너지 입자 — 평소엔 아주 느린 궤도, 말할 때 코어로 스며들며
+     모였다가 플레어 후 조용히 흩어진다 (튀지 않게 스프링 이징)
+     ============================================================= */
+  const EPC = reduced ? 150 : (isPhone ? 330 : 520);
+  const ep = {
+    ang: new Float32Array(EPC),
+    r0: new Float32Array(EPC),
+    rIn: new Float32Array(EPC),
+    y0: new Float32Array(EPC),
+    bobA: new Float32Array(EPC),
+    bobS: new Float32Array(EPC),
+    bobP: new Float32Array(EPC),
+    spd: new Float32Array(EPC),
+    swirl: new Float32Array(EPC),
+    stag: new Float32Array(EPC),
+    size: new Float32Array(EPC),
+    tint: new Float32Array(EPC),
+    bright: new Float32Array(EPC),
+  };
+  const ePos = new Float32Array(EPC * 3);
+  const eAlpha = new Float32Array(EPC);
+  const h1 = new Float32Array(EPC * 3);
+  const h2 = new Float32Array(EPC * 3);
+
+  for (let i = 0; i < EPC; i++) {
+    const sy = Math.random() * 2 - 1;
+    ep.y0[i] = (Math.random() < 0.74 ? sy * 1.30 : sy * 2.45);
+    const lat = Math.sqrt(Math.max(0.10, 1 - Math.pow(Math.abs(ep.y0[i]) / 2.85, 2)));
+    ep.r0[i] = (1.42 + Math.pow(Math.random(), 0.78) * 2.85) * lat;
+    ep.ang[i] = Math.random() * Math.PI * 2;
+    ep.rIn[i] = 1.03 + Math.random() * 0.28;
+    ep.bobA[i] = 0.05 + Math.random() * 0.26;
+    ep.bobS[i] = 0.16 + Math.random() * 0.44;
+    ep.bobP[i] = Math.random() * Math.PI * 2;
+    ep.spd[i] = (0.030 + Math.random() * 0.075) * (Math.random() < 0.5 ? -1 : 1);
+    ep.swirl[i] = (0.45 + Math.random() * 1.5) * (Math.random() < 0.5 ? -1 : 1);
+    ep.stag[i] = Math.random() * 0.5;
+    ep.size[i] = 0.014 + Math.pow(Math.random(), 2.4) * 0.030;
+    ep.tint[i] = Math.random();
+    ep.bright[i] = 0.30 + Math.random() * 0.70;
+  }
+
+  const eGeo = new T.BufferGeometry();
+  eGeo.setAttribute('position', new T.BufferAttribute(ePos, 3));
+  eGeo.setAttribute('aSize', new T.Float32BufferAttribute(Float32Array.from(ep.size), 1));
+  eGeo.setAttribute('aAlpha', new T.BufferAttribute(eAlpha, 1));
+  eGeo.setAttribute('aTint', new T.Float32BufferAttribute(Float32Array.from(ep.tint), 1));
+
+  const eU = {
+    uSize: { value: 1000 },
+    uAccent: coreU.uAccent,
+    uC2: { value: new T.Color(0xe4fffa) },
+  };
+  const eMat = new T.ShaderMaterial({
+    uniforms: eU,
+    transparent: true,
+    depthWrite: false,
+    blending: T.AdditiveBlending,
+    vertexShader: `
+      attribute float aSize;
+      attribute float aAlpha;
+      attribute float aTint;
+      uniform float uSize;
+      varying float vA;
+      varying float vT;
+      void main(){
+        vA = aAlpha;
+        vT = aTint;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = aSize * uSize / max(0.5, -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 uAccent;
+      uniform vec3 uC2;
+      varying float vA;
+      varying float vT;
+      void main(){
+        vec2 q = gl_PointCoord - 0.5;
+        float r = length(q) * 2.0;
+        if (r > 1.0) discard;
+        float core = pow(1.0 - r, 2.8);
+        float halo = pow(1.0 - r, 1.1) * 0.16;
+        vec3 c = mix(uAccent, uC2, vT * 0.8);
+        gl_FragColor = vec4(c, (core + halo) * vA);
+      }`,
+  });
+  const ePoints = new T.Points(eGeo, eMat);
+  ePoints.frustumCulled = false;
+  core.add(ePoints);
+
+  /* 잔궤적 */
+  const trailGeo = new T.BufferGeometry();
+  const tPos = new Float32Array(EPC * 4 * 3);
+  const tAlpha = new Float32Array(EPC * 4);
+  trailGeo.setAttribute('position', new T.BufferAttribute(tPos, 3));
+  trailGeo.setAttribute('aAlpha', new T.BufferAttribute(tAlpha, 1));
+  const trailMat = new T.ShaderMaterial({
+    uniforms: { uColor: coreU.uAccent },
+    transparent: true,
+    depthWrite: false,
+    blending: T.AdditiveBlending,
+    vertexShader: `
+      attribute float aAlpha;
+      varying float vA;
+      void main(){
+        vA = aAlpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      varying float vA;
+      void main(){ gl_FragColor = vec4(uColor, clamp(vA, 0.0, 1.0)); }`,
+  });
+  const trails = new T.LineSegments(trailGeo, trailMat);
+  trails.frustumCulled = false;
+  core.add(trails);
+
+  /* 수렴 시 코어에 번지는 빛 */
+  const eFlash = new T.Sprite(new T.SpriteMaterial({
+    map: glowTex, color: 0xd6fff6, transparent: true, opacity: 0,
+    blending: T.AdditiveBlending, depthWrite: false,
   }));
-  core.add(particles);
+  eFlash.scale.set(2.4, 2.4, 1);
+  core.add(eFlash);
+
+  /* =============================================================
+     바깥 표류 입자 + 단계 HUD 프레임 조립
+     - 화면 넓은 영역에 아주 옅은 빛가루가 늘 느리게 떠다닌다.
+     - 단계가 시작되면 그중 일부가 패널 테두리 위로 날아가 프레임을 짜맞춘다.
+       (모서리 브래킷 → 변을 따라 스캔, 완성 뒤 패널 몸체가 늦게 열린다)
+     - 단계가 끝나면 테두리가 다시 입자로 풀려 표류 궤도로 흩어진다.
+     ============================================================= */
+  const FRAME_W = 3.16, FRAME_H = 0.97, FRAME_CUT = 0.077;
+  const FSLOT = reduced ? 28 : (isPhone ? 38 : 54);
+  const FRAME_COLORS = { weather: 0x8ff0dc, us: 0xff6f86, kr: 0xff7f92, calendar: 0x8beed6 };
+
+  const frameRoot = new T.Group();
+  scene.add(frameRoot);
+
+  function buildFrame(T, color) {
+    const w = FRAME_W / 2, h = FRAME_H / 2, c = FRAME_CUT;
+    const pts = [
+      [-w + c, h], [w - c, h], [w, h - c], [w, -h + c],
+      [w - c, -h], [-w + c, -h], [-w, -h + c], [-w, h - c], [-w + c, h],
+    ];
+    const pos = [], prog = [];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+
+    /* 변: 0.12 ~ 1.0 구간을 따라 채워진다 */
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) / total;
+      pos.push(pts[i - 1][0], pts[i - 1][1], 0, pts[i][0], pts[i][1], 0);
+      prog.push(0.12 + acc * 0.88, 0.12 + (acc + L) * 0.88);
+      acc += L;
+    }
+
+    /* 모서리 브래킷: 조립 초반에 먼저 박힌다 */
+    const K = 0.17;
+    const corners = [[w, h, -1, -1], [-w, h, 1, -1], [-w, -h, 1, 1], [w, -h, -1, 1]];
+    corners.forEach(([cx, cy, dx, dy], i) => {
+      const p0 = 0.004 + i * 0.026;
+      pos.push(cx + dx * K, cy, 0, cx, cy, 0, cx, cy, 0, cx, cy + dy * K, 0);
+      prog.push(p0, p0 + 0.014, p0 + 0.014, p0 + 0.028);
+    });
+
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+    g.setAttribute('aProg', new T.Float32BufferAttribute(prog, 1));
+
+    const uni = {
+      uProg: { value: 0 },
+      uAlpha: { value: 0 },
+      uColor: { value: new T.Color(color) },
+      uHead: { value: 0 },
+    };
+    const mat = new T.ShaderMaterial({
+      uniforms: uni,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: T.AdditiveBlending,
+      vertexShader: `
+        attribute float aProg;
+        varying float vP;
+        void main(){
+          vP = aProg;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        precision highp float;
+        uniform float uProg;
+        uniform float uAlpha;
+        uniform vec3 uColor;
+        uniform float uHead;
+        varying float vP;
+        void main(){
+          float built = 1.0 - smoothstep(uProg - 0.018, uProg + 0.018, vP);
+          float head = exp(-abs(vP - uProg) * 40.0) * uHead;
+          float a = uAlpha * (built * 0.58 + head * 1.95);
+          vec3 c = mix(uColor, vec3(1.0), clamp(head * 0.55, 0.0, 1.0));
+          gl_FragColor = vec4(c, clamp(a, 0.0, 1.0));
+        }`,
+    });
+    const mesh = new T.LineSegments(g, mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 26;
+
+    /* 입자가 도착할 지점: 변을 따라 고르게 */
+    const targets = new Float32Array(FSLOT * 3);
+    const progOf = new Float32Array(FSLOT);
+    let travelled = 0, seg = 1;
+    for (let s = 0; s < FSLOT; s++) {
+      const want = (s + 0.5) / FSLOT * total;
+      while (seg < pts.length - 1 && travelled + Math.hypot(pts[seg][0] - pts[seg - 1][0], pts[seg][1] - pts[seg - 1][1]) < want) {
+        travelled += Math.hypot(pts[seg][0] - pts[seg - 1][0], pts[seg][1] - pts[seg - 1][1]);
+        seg++;
+      }
+      const segLen = Math.hypot(pts[seg][0] - pts[seg - 1][0], pts[seg][1] - pts[seg - 1][1]) || 1;
+      const f = clamp((want - travelled) / segLen, 0, 1);
+      targets[s * 3] = lerp(pts[seg - 1][0], pts[seg][0], f);
+      targets[s * 3 + 1] = lerp(pts[seg - 1][1], pts[seg][1], f);
+      targets[s * 3 + 2] = 0;
+      progOf[s] = 0.12 + (want / total) * 0.88;
+    }
+
+    return { mesh, uni, targets, progOf, t: 0, alive: 0, active: false, prog: 0 };
+  }
+
+  const frameSys = STAGES.map((s) => {
+    const hex = FRAME_COLORS[s.id] || String(s.accent || '#8ff0dc').replace('#', '');
+    const col = typeof hex === 'number' ? hex : parseInt(hex, 16) || 0x8ff0dc;
+    const fr = buildFrame(T, col);
+    fr.mesh.visible = false;
+    frameRoot.add(fr.mesh);
+    return fr;
+  });
+
+  /* ---------- 표류 입자 ---------- */
+  const DUST = reduced ? 70 : (isPhone ? 100 : 140);
+  const du = {
+    ang: new Float32Array(DUST), r: new Float32Array(DUST), y: new Float32Array(DUST),
+    spd: new Float32Array(DUST), ph: new Float32Array(DUST), ph2: new Float32Array(DUST),
+    w1: new Float32Array(DUST), w2: new Float32Array(DUST), w3: new Float32Array(DUST),
+    size: new Float32Array(DUST), bright: new Float32Array(DUST), cap: new Float32Array(DUST),
+    slot: new Int16Array(DUST),
+  };
+  const dPos = new Float32Array(DUST * 3);
+  const dAlpha = new Float32Array(DUST);
+
+  for (let i = 0; i < DUST; i++) {
+    du.ang[i] = Math.random() * 6.2831;
+    du.r[i] = 1.85 + Math.pow(Math.random(), 0.62) * 2.45;
+    du.y[i] = (Math.random() * 2 - 1) * 2.7;
+    du.spd[i] = (0.006 + Math.random() * 0.018) * (Math.random() < 0.5 ? -1 : 1);
+    du.ph[i] = Math.random() * 6.2831;
+    du.ph2[i] = Math.random() * 6.2831;
+    du.w1[i] = 0.09 + Math.random() * 0.22;
+    du.w2[i] = 0.07 + Math.random() * 0.2;
+    du.w3[i] = 0.08 + Math.random() * 0.19;
+    du.size[i] = 0.006 + Math.pow(Math.random(), 2.2) * 0.010;
+    du.bright[i] = 0.28 + Math.random() * 0.72;
+    du.slot[i] = i < FSLOT * 2 ? (i % FSLOT) : -1;
+  }
+
+  const dGeo = new T.BufferGeometry();
+  dGeo.setAttribute('position', new T.BufferAttribute(dPos, 3));
+  dGeo.setAttribute('aSize', new T.Float32BufferAttribute(Float32Array.from(du.size), 1));
+  dGeo.setAttribute('aAlpha', new T.BufferAttribute(dAlpha, 1));
+  dGeo.setAttribute('aTint', new T.Float32BufferAttribute(new Float32Array(DUST).map(() => Math.random()), 1));
+
+  const dustMat = new T.ShaderMaterial({
+    uniforms: {
+      uSize: eU.uSize,
+      uAccent: coreU.uAccent,
+      uC2: eU.uC2,
+      uMul: { value: 1 },
+    },
+    transparent: true,
+    depthWrite: false,
+    blending: T.AdditiveBlending,
+    vertexShader: `
+      attribute float aSize;
+      attribute float aAlpha;
+      attribute float aTint;
+      uniform float uSize;
+      varying float vA;
+      varying float vT;
+      void main(){
+        vA = aAlpha;
+        vT = aTint;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = aSize * uSize / max(0.5, -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 uAccent;
+      uniform vec3 uC2;
+      uniform float uMul;
+      varying float vA;
+      varying float vT;
+      void main(){
+        vec2 q = gl_PointCoord - 0.5;
+        float r = length(q) * 2.0;
+        if (r > 1.0) discard;
+        float core = pow(1.0 - r, 2.8);
+        float halo = pow(1.0 - r, 1.0) * 0.10;
+        vec3 c = mix(uAccent, uC2, vT * 0.7);
+        gl_FragColor = vec4(c, (core + halo) * vA * uMul);
+      }`,
+  });
+  const dust = new T.Points(dGeo, dustMat);
+  dust.frustumCulled = false;
+  dust.renderOrder = 8;
+  scene.add(dust);
+
+  function updateDust(dt, now, st) {
+    const activeIdx = st.started ? st.idx : -1;
+    const fr = activeIdx >= 0 ? frameSys[activeIdx] : null;
+    const sx = frameRoot.scale.x, sy = frameRoot.scale.y;
+    const px = frameRoot.position.x, py = frameRoot.position.y, pz = frameRoot.position.z;
+
+    /* 단계 프레임 조립/해체 */
+    frameSys.forEach((f, k) => {
+      const on = k === activeIdx;
+      if (on && !f.active) f.t = 0;
+      f.active = on;
+      if (on) {
+        f.t += dt;
+        f.prog = easeInOut(clamp(f.t / 0.78, 0, 1));
+      }
+      const wantA = on ? 1 : 0;
+      f.alive += (wantA - f.alive) * (1 - Math.exp(-dt * (on ? 5.5 : 6.5)));
+      if (f.alive < 0.004 && !on) f.alive = 0;
+      if (on && f.prog >= 1 && !f.done) { f.done = true; f.flash = 1; }
+      if (!on) { f.done = false; }
+      f.flash = Math.max(0, (f.flash || 0) - dt * 1.7);
+      f.uni.uProg.value = on ? f.prog : 1;
+      f.uni.uAlpha.value = 0.72 * f.alive * (1 + f.flash * 0.55);
+      f.uni.uHead.value = on && f.prog < 0.995 ? 1.0 : 0.20 * f.alive;
+      f.mesh.visible = f.alive > 0.008;
+      const g = stageGroups[k];
+      if (g) g.userData.gate = clamp((f.t - 0.94) / 0.26, 0, 1) * (on ? 1 : 0);
+    });
+
+    /* 표류 입자 */
+    const arr = fr ? fr.targets : null;
+    for (let i = 0; i < DUST; i++) {
+      const ang = du.ang[i] + now * du.spd[i];
+      let x = Math.cos(ang) * du.r[i] + Math.sin(now * du.w1[i] + du.ph[i]) * 0.16;
+      let y = du.y[i] + Math.sin(now * du.w2[i] + du.ph2[i]) * 0.2;
+      let z = Math.sin(ang) * du.r[i] + Math.cos(now * du.w3[i] + du.ph[i]) * 0.16;
+
+      let want = 0;
+      let slot = -1;
+      if (arr && du.slot[i] >= 0) {
+        slot = du.slot[i];
+        const t0 = fr.progOf[slot] * 0.78 - 0.40;
+        want = fr.t > t0 ? 1 : 0;
+      }
+      const k = 1 - Math.exp(-dt * (want ? 3.2 : 2.4));
+      du.cap[i] += (want - du.cap[i]) * k;
+      const c = du.cap[i];
+      const ce = c * c * (3 - 2 * c);
+
+      if (slot >= 0 && ce > 0.001) {
+        const tx = arr[slot * 3] * sx + px;
+        const ty = arr[slot * 3 + 1] * sy + py;
+        const tz = arr[slot * 3 + 2] + pz;
+        x = lerp(x, tx, ce);
+        y = lerp(y, ty, ce);
+        z = lerp(z, tz, ce);
+      }
+
+      const i3 = i * 3;
+      dPos[i3] = x; dPos[i3 + 1] = y; dPos[i3 + 2] = z;
+
+      const twinkle = 0.72 + 0.28 * Math.sin(now * (0.7 + du.w2[i]) + du.ph[i] * 3.0);
+      let a = du.bright[i] * (0.022 + 0.045 * conv.act) * twinkle;
+      a += ce * du.bright[i] * 0.20;
+      a *= clamp((y + 1.15) / 1.7, 0.02, 1);          /* 아래쪽은 조용히 */
+      dAlpha[i] = clamp(a, 0, 1);
+    }
+    dGeo.attributes.position.needsUpdate = true;
+    dGeo.attributes.aAlpha.needsUpdate = true;
+  }
 
   /* 아주 먼 별가루 */
   const farGeo = new T.BufferGeometry();
@@ -804,7 +1365,7 @@ function initScene(T) {
   }
   farGeo.setAttribute('position', new T.BufferAttribute(farPos, 3));
   const farStars = new T.Points(farGeo, new T.PointsMaterial({
-    size: 0.03, color: 0x8fe8ff, transparent: true, opacity: 0.24,
+    size: 0.03, color: 0x8fe8ff, transparent: true, opacity: 0.20,
     blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
   }));
   scene.add(farStars);
@@ -820,9 +1381,101 @@ function initScene(T) {
   });
 
   /* ---------- 상태 ---------- */
-  const MINT = new T.Color(0x7cf5c8);
+  const MINT = new T.Color(0x8fe6cd);
   const accentNow = new T.Color(0x7cf5c8);
   const accentTo = new T.Color(0x7cf5c8);
+
+  /* 수렴 · 플레어 · 링 벌어짐 (스프링) */
+  const conv = { v: 0, vel: 0, flash: 0, burst: 0, lvlSlow: 0.18, act: 0 };
+  const ringSpring = { v: 0, vel: 0 };
+
+  function energyBurst() {
+    conv.burst = 1;
+  }
+  function ringBurst() {
+    ringSpring.vel += 4.4;
+  }
+
+  function updateEnergy(dt, now) {
+    const lvl = AUDIO.level;
+    conv.lvlSlow += (lvl - conv.lvlSlow) * (1 - Math.exp(-dt / 2.6));
+    const act = clamp((lvl - conv.lvlSlow * 1.02) / 0.15, 0, 1);
+    const kA = act > conv.act ? 0.62 : 0.45;
+    conv.act += (act - conv.act) * (1 - Math.exp(-dt * kA));
+    conv.burst = Math.max(0, conv.burst - dt * 0.42);
+
+    const target = Math.min(1, conv.act * 0.88 + conv.burst * 0.5);
+
+    /* 임계 감쇠 스프링 → 튀지 않고 물 흐르듯 */
+    conv.vel += ((target - conv.v) * 6.0 - conv.vel * 6.4) * dt;
+    conv.v += conv.vel * dt;
+
+    const cg = conv.v;
+    const flashT = clamp((cg - 0.42) / 0.58, 0, 1);
+    conv.flash += (flashT * flashT * 0.9 - conv.flash) * (1 - Math.exp(-dt * 6.5));
+
+    /* 히스토리: h2 = 두 프레임 전, h1 = 직전 프레임 */
+    h2.set(h1);
+    h1.set(ePos);
+
+    const dtS = Math.max(dt, 0.001);
+    for (let i = 0; i < EPC; i++) {
+      ep.ang[i] += dt * ep.spd[i] * (1 + 0.45 * conv.act) * (1 - 0.3 * Math.max(0, cg));
+      const ci = clamp((cg - ep.stag[i] * (1 - cg) * 0.5) * 1.05, -0.25, 1.1);
+      const ce = ci <= 0 ? ci : ci * ci * (3 - 2 * ci);
+
+      const rr = ep.r0[i] * (1 - ce) + ep.rIn[i] * ce;
+      const ay = ep.ang[i] + ce * ep.swirl[i];
+      const bob = Math.sin(now * ep.bobS[i] + ep.bobP[i]) * ep.bobA[i] * (1 - ce * 0.9);
+      const x = Math.cos(ay) * rr;
+      const z = Math.sin(ay) * rr;
+      const y = ep.y0[i] * (1 - ce * 0.9) + bob;
+
+      const i3 = i * 3;
+      ePos[i3] = x; ePos[i3 + 1] = y; ePos[i3 + 2] = z;
+
+      const dist = Math.sqrt(x * x + y * y + z * z);
+      const near = 1 - clamp((dist - 1.0) / 2.9, 0, 1);
+      let a = ep.bright[i] * (0.085 + 0.26 * conv.act + 0.34 * near + 0.62 * Math.max(0, ce) * (0.55 + 0.9 * conv.flash));
+      a *= 0.86 + 0.14 * Math.sin(now * 1.6 + ep.bobP[i] * 3.1);
+      eAlpha[i] = clamp(a, 0, 1);
+    }
+
+    eGeo.attributes.position.needsUpdate = true;
+    eGeo.attributes.aAlpha.needsUpdate = true;
+
+    /* 잔궤적: 움직임이 빠를 때만 얇게 */
+    const MAXT = 0.075;
+    for (let i = 0; i < EPC; i++) {
+      const i3 = i * 3, v4 = i * 12;
+      /* 궤적은 프레임 길이와 무관하게 짧게 자른다 (저사양에서 길게 늘어지지 않게) */
+      let ax = h2[i3], ay2 = h2[i3 + 1], az = h2[i3 + 2];
+      let bx = h1[i3], by2 = h1[i3 + 1], bz = h1[i3 + 2];
+      let da = Math.hypot(ax - bx, ay2 - by2, az - bz);
+      if (da > MAXT) { const f = MAXT / da; ax = bx + (ax - bx) * f; ay2 = by2 + (ay2 - by2) * f; az = bz + (az - bz) * f; }
+      let cx2 = ePos[i3], cy2 = ePos[i3 + 1], cz2 = ePos[i3 + 2];
+      let db = Math.hypot(bx - cx2, by2 - cy2, bz - cz2);
+      if (db > MAXT) { const f = MAXT / db; cx2 = bx + (cx2 - bx) * f; cy2 = by2 + (cy2 - by2) * f; cz2 = bz + (cz2 - bz) * f; }
+      tPos[v4] = ax; tPos[v4 + 1] = ay2; tPos[v4 + 2] = az;
+      tPos[v4 + 3] = bx; tPos[v4 + 4] = by2; tPos[v4 + 5] = bz;
+      tPos[v4 + 6] = bx; tPos[v4 + 7] = by2; tPos[v4 + 8] = bz;
+      tPos[v4 + 9] = cx2; tPos[v4 + 10] = cy2; tPos[v4 + 11] = cz2;
+
+      const dx = ePos[i3] - h1[i3], dy = ePos[i3 + 1] - h1[i3 + 1], dz = ePos[i3 + 2] - h1[i3 + 2];
+      const spd = Math.sqrt(dx * dx + dy * dy + dz * dz) / dtS;
+      const base = clamp((spd - 2.2) * 0.028, 0, 0.085) * (0.3 + 0.7 * conv.act) * ep.bright[i];
+      tAlpha[v4] = base * 0.08;
+      tAlpha[v4 + 1] = base * 0.45;
+      tAlpha[v4 + 2] = base * 0.45;
+      tAlpha[v4 + 3] = base * 0.85;
+    }
+    trailGeo.attributes.position.needsUpdate = true;
+    trailGeo.attributes.aAlpha.needsUpdate = true;
+
+    eFlash.material.opacity = conv.flash * 0.16;
+    eFlash.scale.setScalar(2.1 + conv.flash * 1.5);
+    bgU.uConv.value = conv.v;
+  }
 
   function applyCamera() {
     const w = window.innerWidth, h = window.innerHeight;
@@ -842,11 +1495,13 @@ function initScene(T) {
     const coreY = 1 - (p.y * 0.5 + 0.5);
     const radY = Math.abs(edge.y - p.y) * 0.5;
     bgU.uCoreY.value = coreY;
-    bgU.uHorizon.value = Math.min(0.94, coreY + radY + 0.004);
+    bgU.uHorizon.value = Math.min(0.92, coreY + radY + 0.012);
     bgU.uCoreX.value = p.x * 0.5 + 0.5;
 
     const rSize = renderer.getDrawingBufferSize(new T.Vector2());
     bgU.uRes.value.set(rSize.x, rSize.y);
+    eU.uSize.value = rSize.y / (2 * Math.tan((FOV * Math.PI) / 360));
+    ringUniforms.uCoreZ.value = -d;
 
     const visW = 2 / frac * aspect;
     const targetW = visW * (aspect < 1 ? 0.86 : 0.44);
@@ -854,6 +1509,8 @@ function initScene(T) {
     const s = clamp(targetW / (3.16 * proj), 0.3, 1.25);
     stageRoot.scale.set(s, s, 1);
     const panelY = -0.36 / (s * proj);
+    frameRoot.position.set(0, panelY * s, 1.2);
+    frameRoot.scale.set(s, s, 1);
     stageGroups.forEach((g) => {
       const pc = g.userData.panel;
       if (!pc) return;
@@ -876,7 +1533,8 @@ function initScene(T) {
         if (immediate) { g.userData.v = state.started ? g.userData.target : 0; applyStage(g); }
       });
       const acc = (STAGES[i] && STAGES[i].accent) || '#7cf5c8';
-      accentTo.set(acc).lerp(MINT, 0.68);
+      accentTo.set(acc).lerp(MINT, 0.58);
+      if (!immediate && i >= 0) { energyBurst(); ringBurst(); }
     },
     update(dt, now, st) {
       const lvl = AUDIO.level;
@@ -885,22 +1543,24 @@ function initScene(T) {
       bgU.uTime.value = now;
       bgU.uLevel.value = lvl;
 
-      accentNow.lerp(accentTo, 1 - Math.exp(-dt * 1.6));
+      accentNow.lerp(accentTo, 1 - Math.exp(-dt * 1.4));
       coreU.uAccent.value.copy(accentNow);
       bgU.uAccent.value.copy(accentNow);
 
-      /* 카메라 미세 시선 */
+      /* 카메라: 아주 느린 궤도만 (흔들림 없이) */
+      pointer.x += (pointer.tx - pointer.x) * (1 - Math.exp(-dt * 1.1));
+      pointer.y += (pointer.ty - pointer.y) * (1 - Math.exp(-dt * 1.1));
       const d = layout.d;
-      const sx = Math.sin(now * 0.11) * 0.045 + pointer.x * 0.16;
+      const sx = Math.sin(now * 0.058) * 0.040 + pointer.x * 0.085;
       camera.position.x = Math.sin(sx) * d;
       camera.position.z = Math.cos(sx) * d;
-      camera.position.y = pointer.y * -0.16;
-      camera.lookAt(0, -d * 0.0614 + pointer.y * -0.05, 0);
+      camera.position.y = pointer.y * -0.10;
+      camera.lookAt(0, -d * 0.0614 + pointer.y * -0.03, 0);
 
       /* 코어 호흡 */
-      const pulse = 1 + lvl * 0.065 + Math.sin(now * 0.85) * 0.004;
+      const pulse = 1 + lvl * 0.06 + Math.sin(now * 0.78) * 0.004;
       core.scale.setScalar(pulse);
-      core.rotation.y = now * 0.045 * (st.playing ? 1 : 0.45);
+      core.rotation.y = now * 0.038 * (st.playing ? 1 : 0.45);
       wire1.rotation.y = now * 0.085;
       wire1.rotation.x = Math.sin(now * 0.21) * 0.12;
       wire2.rotation.y = -now * 0.05;
@@ -911,26 +1571,39 @@ function initScene(T) {
       const chordMat = chordGroup.children[0].material;
       chordMat.opacity = 0.05 + 0.09 * lvl;
 
-      coreGlow.material.opacity = 0.14 + 0.5 * lvl;
-      coreGlow.scale.setScalar(1.05 + lvl * 0.5);
-      coreGlow2.material.opacity = 0.18 + 0.45 * lvl;
+      coreGlow.material.opacity = 0.11 + 0.34 * lvl;
+      coreGlow.scale.setScalar(1.05 + lvl * 0.45);
+      coreGlow2.material.opacity = 0.14 + 0.30 * lvl;
       coreGlow2.scale.setScalar(0.4 + lvl * 0.22);
       innerOcta.rotation.y = -now * 0.6;
       innerOcta.rotation.x = now * 0.35;
       innerOcta.material.opacity = 0.3 + 0.3 * lvl;
 
-      rings.forEach((r, i) => {
-        const sp = r.cfg.speed * (st.playing ? 1 : 0.4) * (1 + lvl * 1.7);
-        r.t += dt * sp;
-        r.g.rotation.z = r.t;
-        const wob = 1 + Math.sin(now * 0.7 + i) * 0.008 + lvl * 0.055;
-        r.g.scale.setScalar(wob);
-        r.mat.opacity = r.cfg.op * (0.72 + 0.5 * lvl);
+      /* 링 */
+      ringSpring.vel += (-ringSpring.v * 34 - ringSpring.vel * 7.6) * dt;
+      ringSpring.v += ringSpring.vel * dt;
+      const ex = clamp(ringSpring.v, -0.6, 1.6);
+      ringUniforms.uRingDim.value = (1 - 0.30 * clamp(ex, 0, 1)) * (0.92 + 0.18 * lvl);
+
+      ringSys.forEach((R, i) => {
+        R.phase += dt;
+        const wob = 1 + 0.20 * Math.sin(R.phase * 0.16 + i * 2.3) + 0.07 * Math.sin(R.phase * 0.57 + i);
+        const w = R.def.w * wob * (1 + 2.6 * Math.max(0, ex));
+        R.ang += dt * w;
+        R.g.rotation.z = R.ang;
+        R.g.rotation.x = R.def.tilt[0] + Math.sin(R.phase * 0.18 + i) * 0.05;
+        R.g.rotation.y = R.def.tilt[1] + Math.sin(R.phase * 0.13 + i * 1.7) * 0.055;
+        R.g.scale.setScalar(1 + 0.17 * ex);
+        R.segs.forEach((m) => {
+          const ud = m.userData;
+          m.rotation.z = Math.sin(R.phase * ud.k + ud.ph) * ud.amp + ex * ud.exK;
+        });
       });
 
-      particles.rotation.y = now * 0.05;
-      particles.rotation.x = Math.sin(now * 0.13) * 0.1;
-      particles.material.opacity = 0.35 + 0.3 * lvl;
+      /* 에너지 입자 · 표류 입자(프레임 조립) */
+      updateEnergy(dt, now);
+      updateDust(dt, now, st);
+
       farStars.rotation.y = -now * 0.008;
 
       /* 단계 전환 */
@@ -946,6 +1619,20 @@ function initScene(T) {
 
       if (composer) composer.render();
       else renderer.render(scene, camera);
+    },
+    dispose() {
+      scene.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach((m) => {
+            if (m.map) m.map.dispose();
+            m.dispose();
+          });
+        }
+      });
+      bgMat.dispose();
+      bg.geometry.dispose();
     },
   };
 
@@ -963,11 +1650,12 @@ function initScene(T) {
       c.position.y = c.userData.baseY + (1 - e) * 0.16;
       c.scale.setScalar(0.9 + 0.1 * e);
       c.rotation.x = c.userData.baseRX + (1 - e) * -0.55;
+      const gate = g.userData.gate == null ? 1 : g.userData.gate;
       c.traverse((o) => {
         if (!o.material) return;
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach((m) => {
-          if (m.userData && m.userData.base != null) m.opacity = m.userData.base * lv;
+          if (m.userData && m.userData.base != null) m.opacity = m.userData.base * lv * (m.userData.frameGated ? gate : 1);
         });
       });
     });
@@ -981,8 +1669,8 @@ function initScene(T) {
   window.addEventListener('orientationchange', () => setTimeout(onResize, 220));
   window.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'touch') return;
-    pointer.x = (e.clientX / window.innerWidth - 0.5) * 2;
-    pointer.y = (e.clientY / window.innerHeight - 0.5) * 2;
+    pointer.tx = (e.clientX / window.innerWidth - 0.5) * 2;
+    pointer.ty = (e.clientY / window.innerHeight - 0.5) * 2;
   });
 
   api.setStage(0, true);
@@ -990,6 +1678,15 @@ function initScene(T) {
   api.scene = scene;
   api.camera = camera;
   api.attachComposer = (c) => { composer = c; };
+  window.__holoApi = api;
+  api.__dbg = () => ({
+    idx: state.idx, started: state.started, lvl: +AUDIO.level.toFixed(2),
+    act: +conv.act.toFixed(2), cv: +conv.v.toFixed(2), flash: +conv.flash.toFixed(2),
+    frames: frameSys.map((f) => ({ t: +f.t.toFixed(2), alive: +f.alive.toFixed(2), prog: +f.prog.toFixed(2), vis: f.mesh.visible })),
+    gates: stageGroups.map((g) => +(g.userData.gate == null ? -1 : g.userData.gate).toFixed(2)),
+    panelOp: stageGroups.map((g) => +(g.userData.panel ? g.userData.panel.children[0].material.opacity : -1).toFixed(2)),
+    pv: stageGroups.map((g) => +g.userData.v.toFixed(2)),
+  });
   return api;
 }
 
@@ -1006,7 +1703,7 @@ async function loadBloom() {
     const w = window.innerWidth, h = window.innerHeight;
     const c = new EffectComposer(sceneApi.renderer);
     c.addPass(new RenderPass(sceneApi.scene, sceneApi.camera));
-    c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.24, 0.55, 0.62));
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.17, 0.70, 0.74));
     c.addPass(new OutputPass());
     c.setSize(w, h);
     sceneApi.attachComposer(c);
@@ -1152,31 +1849,11 @@ function hudPanel(T, opt) {
   for (let yy = 0; yy < H; yy += 5) { x.beginPath(); x.moveTo(0, yy); x.lineTo(W, yy); x.stroke(); }
   x.restore();
 
-  // 테두리
+  // 테두리: 입자 프레임이 그리므로 여기서는 아주 옅은 유리 가장자리만
   chamferPath(x, 2.5, 2.5, W - 5, H - 5, cut);
-  x.strokeStyle = hexA(accent, 0.62);
+  x.strokeStyle = hexA(accent, 0.10);
   x.lineWidth = 3;
   x.stroke();
-
-  // 코너 브래킷
-  x.strokeStyle = hexA(accent, 0.98);
-  x.lineWidth = 5;
-  const B = 54;
-  [[8, 8, 1, 1], [W - 8, 8, -1, 1], [8, H - 8, 1, -1], [W - 8, H - 8, -1, -1]].forEach(([cx, cy, dx, dy]) => {
-    x.beginPath();
-    x.moveTo(cx + dx * B, cy);
-    x.lineTo(cx, cy);
-    x.lineTo(cx, cy + dy * B);
-    x.stroke();
-  });
-
-  // 상단 액센트 라인
-  const lg = x.createLinearGradient(W * 0.1, 0, W * 0.9, 0);
-  lg.addColorStop(0, hexA(accent, 0));
-  lg.addColorStop(0.5, hexA(accent, 0.9));
-  lg.addColorStop(1, hexA(accent, 0));
-  x.fillStyle = lg;
-  x.fillRect(W * 0.1, 2, W * 0.8, 3);
 
   const padL = 62;
   // 라벨
@@ -1328,9 +2005,12 @@ function buildStage(T, s, opt) {
     sub: s.sub || '',
     tag,
   });
+  /* 패널 몸체는 입자 테두리가 조립된 뒤에 늦게 나타난다 */
+  panel.material.userData.frameGated = true;
 
   const panelC = add(panel, { y: -0.44, z: 1.2, rx: -0.02, delay: 0 });
   g.userData.panel = panelC;
+  g.userData.gate = GATE_START; // 시작 전엔 숨김
 
   /* 단계별 3D 오브젝트 */
   if (visual === 'weather') {
