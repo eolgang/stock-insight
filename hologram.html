@@ -78,7 +78,7 @@
     <ul class="intro-list" id="introList"></ul>
     <div class="intro-actions">
       <button class="btn btn-primary" id="btnStartSound" type="button">▶ 홀로그램 브리핑 시작</button>
-      <button class="btn" id="btnStartSilent" type="button">◻ 소리 끄고 3D만 보기</button>
+      <button class="btn" id="btnStartSilent" type="button">소리 없이 3D만 보기</button>
     </div>
     <p class="intro-note">음성은 AI가 읽습니다. 이어폰이나 작은 볼륨을 권장합니다.<br>데이터 <code id="introAsOf">2026-11-22 아침 브리핑</code></p>
   </div>
@@ -87,7 +87,7 @@
 <div class="toast" id="toast" role="status"></div>
 
 <audio id="voice" preload="auto" playsinline></audio>
-<script type="module" src="hologram.js?v=20261122j"></script>
+<script type="module" src="hologram.js?v=20261122m"></script>
 <script>
   // 모듈/CDN 로딩이 막힌 환경: 3D 없이 자막·음성만이라도 돌게 한다.
   setTimeout(function () {

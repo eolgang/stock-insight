@@ -418,6 +418,30 @@ async function initScene(T) {
   scene.add(rim);
 
   /* --- 바닥: 네온 그리드 --- */
+  // 바닥 거울 반사 (가볍게 깔고 어둡게 덮어 홀로그램 잔상처럼)
+  let mirror = null;
+  try {
+    const { Reflector } = await import('three/addons/objects/Reflector.js');
+    mirror = new Reflector(new T.CircleGeometry(22, 64), {
+      clipBias: 0.003,
+      textureWidth: isPhone ? 512 : 1024,
+      textureHeight: isPhone ? 512 : 1024,
+      color: 0x0a1a18,
+    });
+    mirror.rotation.x = -Math.PI / 2;
+    mirror.position.y = 0.0;
+    scene.add(mirror);
+    const dim = new T.Mesh(
+      new T.CircleGeometry(22, 64),
+      new T.MeshBasicMaterial({ color: 0x02080a, transparent: true, opacity: 0.44, depthWrite: false })
+    );
+    dim.rotation.x = -Math.PI / 2;
+    dim.position.y = 0.002;
+    scene.add(dim);
+  } catch (e) {
+    console.warn('[holo] 바닥 반사 생략:', e);
+  }
+
   const gridUniforms = {
     uTime: { value: 0 },
     uColor: { value: new T.Color(0x7cf5c8) },
