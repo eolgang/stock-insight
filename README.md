@@ -4,7 +4,7 @@
 GitHub Pages로 배포되는 정적 사이트입니다. 빌드 도구 없이 HTML/CSS/JS + JSON만 씁니다.
 
 - 사이트: https://eolgang.github.io/stock-insight/
-- 최근 업데이트: 2026-11-21
+- 최근 업데이트: 2026-11-22
 
 ## 구성
 
@@ -16,6 +16,8 @@ data/insights.json  ★ 모든 콘텐츠(수치·표·뉴스·주석)는 이 파
 data/screener*.json 조건검색 스캔 결과·성과 히스토리 (scripts/scan_krx.py가 생성)
 data/ma-charts.json 종목 차트용 일봉·이동평균 (scripts/scan_krx.py가 생성)
 scripts/scan_krx.py 장마감 조건검색 스캐너
+hologram.html/js/css  “3D 홀로그램 브리핑” 독립 페이지 (Three.js CDN, data/briefing-hologram.json + mp3)
+scripts/build_hologram_audio.py  홀로그램 브리핑 음성(edge-tts) 생성 + 타임라인 자동 정렬
 money-flow.js/css   “경제 인사이트” 탭(자산별 자금 흐름·한국 부동산, data/money-flow.json을 읽음)
 data/money-flow.json 자금 흐름 스냅숏 누적(주 1회 갱신, 스키마는 docs/money-flow-schema.md)
 data/money-flow.sample.json 실제 스냅숏이 없을 때만 쓰는 예시(코인·korea_property 포함)
@@ -49,6 +51,41 @@ favicon.svg         아이콘
 | 손익 계산기 | 평단가·목표가·손절가·손익비 실시간 계산(원/달러) |
 | 폭등 징표 | 테슬라 vs 엔비디아 비교, 공통 징표, 가짜 신호 반례, 13F 시차 |
 | 13F 수급 | 2026 Q3 5사 수급, AI 병목주·암페놀 액면분할 주의 |
+
+## 3D 홀로그램 브리핑 (`hologram.html`)
+
+아침 브리핑을 40여 초 분량의 3D 홀로그램 씬 + 한국어 음성으로 재생하는 독립 페이지.
+메인 페이지 히어로의 **🌌 3D 홀로그램 브리핑** 카드로 들어간다.
+
+- 구성: `hologram.html`(화면 틀) · `hologram.css`(HUD·인트로·모바일 390px) · `hologram.js`(Three.js 씬 + 타임라인·음성 동기화)
+- 데이터: `data/briefing-hologram.json` **한 파일** — 날짜·문단(단계)·수치·음성 대본이 모두 여기에 있다.
+- 음성: `data/briefing-<날짜>.mp3` (edge-tts `ko-KR-InJoonNeural`). 브라우저가 음성을 못 읽으면 `speechSynthesis`(ko-KR)로 대체 재생.
+- 3D: three@0.160 CDN(importmap). 블룸·CDN이 막히면 자동으로 자막+음성 모드(`body.no3d`)로 떨어진다. 빌드 도구·API 비용 없음.
+
+### 매일 아침 갱신 절차
+
+1. `data/briefing-hologram.json`의 `date`·`weekday`·`as_of`와 `stages[]`의 `headline`·`sub`·`metrics`·`caption`·`speech`를 오늘 내용으로 고친다.
+   - `stages[].visual`은 3D 연출 종류: `weather`(태양·링) / `us`(하락 막대·궤적) / `kr`(유리판) / `calendar`(유리판 3장).
+   - `metrics[].pct`(숫자)는 미증시 막대 높이·국장 유리판 등락 표시에 쓰인다.
+   - `audio.duration`과 `stages[].start/end`는 비워 두어도 된다(아래 스크립트가 채운다).
+2. 음성과 타임라인을 만든다.
+
+   ```bash
+   python3 -m pip install edge-tts mutagen
+   python3 scripts/build_hologram_audio.py            # --voice ko-KR-SunHiNeural --rate +8% 도 가능
+   ```
+
+   문단별 mp3를 만들고 실제 길이를 재서 `stages[].start/end`·`audio.duration`을 채운 뒤, 한 파일 `data/briefing-<날짜>.mp3`로 합친다.
+3. `data/briefing-hologram.json` + `data/briefing-<날짜>.mp3`를 함께 커밋한다. (HTML/CSS/JS를 고쳤으면 `hologram.html`의 `?v=`도 올린다.)
+
+```bash
+git add data/briefing-hologram.json data/briefing-2026-11-22.mp3
+git commit -m "hologram: 11/22 아침 브리핑 음성·타임라인 갱신"
+git push
+```
+
+- 재생 정책상 자동재생이 막히므로 인트로에서 **▶ 홀로그램 브리핑 시작**(소리 켜기) 또는 **소리 없이 3D만 보기**를 한 번 누른다.
+- 하단 배지로 파트를 건너뛸 수 있고, 진행 바 드래그·스페이스(재생/정지)·←/→(파트 이동)도 된다.
 
 ## 경제 인사이트 (자금 흐름)
 
