@@ -75,6 +75,7 @@ favicon.svg         아이콘
 1. `data/briefing-hologram.json`의 `date`·`weekday`·`as_of`와 `stages[]`의 `headline`·`sub`·`metrics`·`caption`·`speech`를 오늘 내용으로 고친다.
    - `stages[].visual`은 3D 연출 종류: `weather`(앰버 게이지 링) / `us`(네온 낙폭 막대) / `kr`(코스피 HUD + 지표 칩) / `calendar`(3겹 홀로그램 레이어).
    - `metrics[].pct`(숫자)는 미증시 막대 높이·국장 유리판 등락 표시에 쓰인다.
+   - **HUD 색은 등락 방향을 따른다** — `stages[].pct`(없으면 `metrics[].pct` 첫 숫자, 그다음 `headline`/`sub`/`caption`의 %)의 **부호**로 정해진다: 상승 빨강 `#ff5f6d`, 하락 파랑 `#5b9cff`, 0·판별 불가 중립 시안 `#7cf5c8`. 색은 `hologram.js`의 `STAGE_COLORS` 표 한 곳에서만 관리하고(`visual` 값이 `us`·`kr`인 단계가 방향 연동), HTML/JS에 날짜별 색을 하드코딩하지 않는다. 그래서 미증시·국장 단계에는 대표 지수의 `pct`를 꼭 채운다.
    - `audio.duration`과 `stages[].start/end`는 비워 두어도 된다(아래 스크립트가 채운다).
 2. 음성과 타임라인을 만든다.
 

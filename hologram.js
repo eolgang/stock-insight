@@ -59,6 +59,7 @@ async function boot() {
   STAGES = Array.isArray(DOC.stages) ? DOC.stages : [];
   if (!STAGES.length) throw new Error('stages empty');
   if (STAGES.some((s) => s.start == null)) equalizeTimeline();
+  resolveStageColors();
   state.duration = Number(DOC.audio && DOC.audio.duration) || STAGES[STAGES.length - 1].end || 45;
 
   buildHud();
@@ -83,6 +84,75 @@ async function boot() {
 function equalizeTimeline() {
   const per = (Number(DOC.audio && DOC.audio.duration) || STAGES.length * 10) / STAGES.length;
   STAGES.forEach((s, i) => { s.start = +(i * per).toFixed(2); s.end = +((i + 1) * per).toFixed(2); });
+}
+
+/* =============================================================
+   단계 색 — 등락 방향 연동
+   - 숫자(pct)의 부호로 HUD 색을 고른다: 상승=빨강, 하락=파랑, 0·판별불가=중립 시안.
+   - 색은 이 표 한 곳에서만 관리한다. (미국장 규칙을 바꾸려면 us 행만 고친다)
+   - 색은 매일 새로 만들어지는 data/briefing-hologram.json 값에서 계산한다.
+     (stages[].pct → metrics[].pct 첫 숫자 → headline/sub/caption 의 % 순서로 읽는다)
+   ============================================================= */
+const STAGE_COLORS = {
+  weather:  { frame: 0x8ff0dc },   // 민트 고정 (패널 강조색은 데이터 accent 유지)
+  calendar: { frame: 0x8beed6 },   // 시안 고정 (패널 강조색은 데이터 accent 유지)
+  us: { frame: null, dir: { up: 0xff5f6d, down: 0x5b9cff, flat: 0x7cf5c8 } },
+  kr: { frame: null, dir: { up: 0xff5f6d, down: 0x5b9cff, flat: 0x7cf5c8 } },
+};
+/* 방향이 없는 단계(날씨·일정)는 등락률 표기에 색을 입히지 않는다(중립) */
+
+const hexOf = (n) => '#' + ('000000' + (n >>> 0).toString(16)).slice(-6);
+const hexNum = (v) => (typeof v === 'number' ? v : (parseInt(String(v || '').replace('#', ''), 16) || 0x8ff0dc));
+const mixHex = (a, b, t) => (clamp(Math.round(((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * t), 0, 255) << 16)
+  | (clamp(Math.round(((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * t), 0, 255) << 8)
+  | clamp(Math.round((a & 255) + ((b & 255) - (a & 255)) * t), 0, 255);
+
+/* '−5.21%' · '-5.21%' 같은 표기에서 숫자만 */
+function readPct(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+  const m = v.replace(/[−–—]/g, '-').match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  return isFinite(n) ? n : null;
+}
+
+/* 단계의 대표 등락률 */
+function stagePct(s) {
+  let p = readPct(s && s.pct);
+  if (p == null) {
+    const ms = Array.isArray(s && s.metrics) ? s.metrics : [];
+    for (let i = 0; i < ms.length; i++) { p = readPct(ms[i] && ms[i].pct); if (p != null) break; }
+  }
+  if (p == null) p = readPct(s && s.headline);
+  if (p == null) p = readPct(s && s.sub);
+  if (p == null) p = readPct(s && s.caption);
+  return p;
+}
+
+function stageRule(s) {
+  if (!s) return null;
+  return STAGE_COLORS[s.visual] || STAGE_COLORS[s.id] || null;
+}
+
+/* 각 단계에 s.dir(-1/0/null) · s.accent('#rrggbb') · s._frame(숫자)를 정한다 */
+function resolveStageColors() {
+  STAGES.forEach((s) => {
+    const rule = stageRule(s);
+    const hasDir = !!(rule && rule.dir);
+    if (hasDir) {
+      const pct = stagePct(s);
+      s.pct = pct;
+      s.dir = pct == null ? null : (pct > 0 ? 1 : pct < 0 ? -1 : 0);
+      const col = s.dir == null ? rule.dir.flat : (s.dir > 0 ? rule.dir.up : rule.dir.down);
+      s.accent = hexOf(col);
+      s._frame = col;
+    } else {
+      s.dir = null;
+      s._frame = (rule && rule.frame != null) ? rule.frame
+        : (parseInt(String(s.accent || '#8ff0dc').replace('#', ''), 16) || 0x8ff0dc);
+    }
+  });
 }
 
 /* ---------------- HUD ---------------- */
@@ -1098,7 +1168,7 @@ function initScene(T) {
      ============================================================= */
   const FRAME_W = 3.16, FRAME_H = 0.97, FRAME_CUT = 0.077;
   const FSLOT = reduced ? 28 : (isPhone ? 38 : 54);
-  const FRAME_COLORS = { weather: 0x8ff0dc, us: 0xff6f86, kr: 0xff7f92, calendar: 0x8beed6 };
+
 
   const frameRoot = new T.Group();
   scene.add(frameRoot);
@@ -1218,8 +1288,7 @@ function initScene(T) {
   }
 
   const frameSys = STAGES.map((s) => {
-    const hex = FRAME_COLORS[s.id] || String(s.accent || '#8ff0dc').replace('#', '');
-    const col = typeof hex === 'number' ? hex : parseInt(hex, 16) || 0x8ff0dc;
+    const col = s._frame != null ? s._frame : (parseInt(String(s.accent || '#8ff0dc').replace('#', ''), 16) || 0x8ff0dc);
     const fr = buildFrame(T, col);
     fr.mesh.visible = false;
     frameRoot.add(fr.mesh);
@@ -1707,6 +1776,7 @@ function initScene(T) {
     act: +conv.act.toFixed(2), cv: +conv.v.toFixed(2), flash: +conv.flash.toFixed(2),
     frames: frameSys.map((f) => ({ t: +f.t.toFixed(2), alive: +f.alive.toFixed(2), prog: +f.prog.toFixed(2), vis: f.mesh.visible })),
     gates: stageGroups.map((g) => +(g.userData.gate == null ? -1 : g.userData.gate).toFixed(2)),
+    stages: STAGES.map((s) => ({ id: s.id, visual: s.visual, pct: s.pct, dir: s.dir, accent: s.accent, frame: s._frame })),
     panelOp: stageGroups.map((g) => +(g.userData.panel ? g.userData.panel.children[0].material.opacity : -1).toFixed(2)),
     pv: stageGroups.map((g) => +g.userData.v.toFixed(2)),
   });
@@ -1905,27 +1975,40 @@ function hudPanel(T, opt) {
   x.fillText(value, padL, 108 + vs);
   x.shadowBlur = 0;
 
-  // 보조 라인
+  // 보조 라인 — 등락률 숫자는 그 숫자의 방향 색(상승 빨강 / 하락 파랑 / 0 시안)
   if (opt.sub) {
-    const parts = String(opt.sub).split('·').map((s) => s.trim()).filter(Boolean);
-    let cx = padL;
+    const raw = String(opt.sub);
     const baseline = H - 74;
     const maxW = W - padL * 2 - 10;
     let fs = 40;
     x.font = '500 ' + fs + 'px ' + FONT_SANS;
-    while (x.measureText(String(opt.sub)).width > maxW && fs > 20) {
+    while (x.measureText(raw).width > maxW && fs > 20) {
       fs -= 2; x.font = '500 ' + fs + 'px ' + FONT_SANS;
     }
-    parts.forEach((p, i) => {
-      const isPct = /^[−+\-]?\d+(\.\d+)?%$/.test(p);
-      x.fillStyle = isPct ? hexA('#ff7a8c', 0.95) : 'rgba(214,242,235,0.84)';
-      x.fillText(p, cx, baseline);
-      cx += x.measureText(p).width;
-      if (i < parts.length - 1) {
-        x.fillStyle = 'rgba(178,216,208,0.8)';
-        x.fillText('   ·   ', cx, baseline);
-        cx += x.measureText('   ·   ').width;
+    const dirTab = opt.dir || null;
+    const parts = [];
+    const re = /[−–—+\-]?\d+(?:\.\d+)?\s*%/g;
+    let last = 0, m;
+    while ((m = re.exec(raw))) {
+      if (m.index > last) parts.push({ t: raw.slice(last, m.index), pct: null });
+      /* 부호가 붙은 등락률, 또는 그 단계의 대표 등락률과 같은 값만 색을 입힌다.
+         ("FOMC 91.4%"·"10년 4.92%" 처럼 확률·금리는 중립) */
+      const num = readPct(m[0]);
+      const signed = /^[−–—+\-]/.test(m[0]);
+      const isStage = typeof opt.pct === 'number' && num != null && Math.abs(num - opt.pct) < 0.005;
+      parts.push({ t: m[0], pct: (signed || isStage) ? num : null });
+      last = m.index + m[0].length;
+    }
+    if (last < raw.length) parts.push({ t: raw.slice(last), pct: null });
+    let cx = padL;
+    parts.forEach((p) => {
+      if (p.pct == null || !dirTab) x.fillStyle = 'rgba(214,242,235,0.84)';
+      else {
+        const col = p.pct > 0 ? dirTab.up : p.pct < 0 ? dirTab.down : dirTab.flat;
+        x.fillStyle = hexA(hexOf(col), 0.95);
       }
+      x.fillText(p.t, cx, baseline);
+      cx += x.measureText(p.t).width;
     });
   }
 
@@ -2023,6 +2106,8 @@ function buildStage(T, s, opt) {
 
   const panel = hudPanel(T, {
     accent,
+    dir: (stageRule(s) || {}).dir || null,
+    pct: typeof s.pct === 'number' ? s.pct : null,
     label,
     value,
     sub: s.sub || '',
@@ -2065,7 +2150,9 @@ function buildStage(T, s, opt) {
   }
 
   if (visual === 'us' || s.id === 'us') {
-    // 네온 하락 막대 (지수별 낙폭)
+    // 네온 낙폭 막대 (지수별 변동폭) — 막대 색은 그 단계의 방향 색
+    const barCol = hexNum(accent);
+    const barEdge = mixHex(barCol, 0xffffff, 0.35);
     const bars = m.filter((d) => typeof d.pct === 'number').slice(0, 4);
     const maxAbs = Math.max(1, ...bars.map((b) => Math.abs(b.pct)));
     const bg2 = new T.Group();
@@ -2074,14 +2161,14 @@ function buildStage(T, s, opt) {
       const x = (i - (bars.length - 1) / 2) * 0.30;
       const h = 0.08 + (Math.abs(b.pct) / maxAbs) * 0.40;
       const mat = new T.MeshBasicMaterial({
-        color: 0xff6b81, transparent: true, opacity: 0.34, blending: T.AdditiveBlending, depthWrite: false,
+        color: barCol, transparent: true, opacity: 0.34, blending: T.AdditiveBlending, depthWrite: false,
       });
       const bar = new T.Mesh(new T.BoxGeometry(0.075, 1, 0.075), mat);
       bar.scale.y = h;
       bar.position.set(x, baseY + h / 2, 0);
       const edge = new T.LineSegments(
         new T.EdgesGeometry(new T.BoxGeometry(0.075, 1, 0.075)),
-        new T.LineBasicMaterial({ color: 0xff8f9d, transparent: true, opacity: 0.9, blending: T.AdditiveBlending, depthWrite: false })
+        new T.LineBasicMaterial({ color: barEdge, transparent: true, opacity: 0.9, blending: T.AdditiveBlending, depthWrite: false })
       );
       edge.scale.y = h;
       edge.position.copy(bar.position);
@@ -2089,7 +2176,7 @@ function buildStage(T, s, opt) {
     });
     const baseline = new T.Mesh(
       new T.BoxGeometry(1.36, 0.004, 0.004),
-      new T.MeshBasicMaterial({ color: 0xff6b81, transparent: true, opacity: 0.7, blending: T.AdditiveBlending, depthWrite: false })
+      new T.MeshBasicMaterial({ color: barCol, transparent: true, opacity: 0.7, blending: T.AdditiveBlending, depthWrite: false })
     );
     baseline.position.set(0, baseY, 0);
     bg2.add(baseline);
