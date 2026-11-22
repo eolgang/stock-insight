@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>🌌 3D 홀로그램 브리핑 · 얼미리서치</title>
-<meta name="description" content="얼미리서치 3D 홀로그램 브리핑 — 날씨·미국 증시·한국 증시·핵심 일정을 40여 초 음성과 홀로그램 씬으로. 매일 아침 브리핑 데이터로 갱신됩니다.">
-<meta name="theme-color" content="#03080a">
+<title>🌌 얼미 브리핑 · 3D 홀로그램</title>
+<meta name="description" content="얼미리서치 3D 홀로그램 브리핑 — 날씨·미국 증시·한국 증시·핵심 일정을 음성과 자비스 스타일 홀로그램 씬으로. 매일 아침 브리핑 데이터로 갱신됩니다.">
+<meta name="theme-color" content="#020906">
 <meta property="og:title" content="얼미리서치 · 3D 홀로그램 브리핑">
-<meta property="og:description" content="날씨 → 미국 증시 → 한국 증시 → 일정, 40여 초 홀로그램 브리핑.">
+<meta property="og:description" content="날씨 → 미국 증시 → 한국 증시 → 일정, 음성으로 흐르는 홀로그램 브리핑.">
 <meta property="og:type" content="website">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="stylesheet" href="hologram.css?v=20261122i">
+<link rel="stylesheet" href="hologram.css?v=20261122m">
 <script type="importmap">
 {
   "imports": {
@@ -29,65 +29,65 @@
 <div class="scanlines" aria-hidden="true"></div>
 
 <header class="hud-top">
-  <a class="hud-back" href="index.html" aria-label="얼미리서치로 돌아가기">
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M7.5 1.5 3 6l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    얼미리서치
+  <a class="brand" href="index.html">
+    <span class="brand-dot" aria-hidden="true"></span><b>얼미 브리핑</b>
   </a>
-  <div class="hud-brand"><span class="dot"></span><b>HOLOGRAM</b> BRIEFING</div>
-  <div class="hud-date"><b id="hudDate">2026.11.22</b><br>(<span id="hudWeekday">일</span>) 04:59</div>
+  <div class="hud-right">
+    <span class="hud-date" id="hudDate">2026. 11. 22 · 일요일</span>
+    <a class="hud-back" href="index.html"><span aria-hidden="true">‹</span>얼미리서치</a>
+  </div>
 </header>
 
-<main class="hud-bottom" id="hud">
-  <div class="timeline">
-    <span class="time"><b id="tNow">00:00</b> / <span id="tTotal">00:45</span></span>
-    <div class="track" id="track" role="slider" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="45" aria-valuenow="0" tabindex="0">
-      <div class="fill" id="fill"></div>
-      <div class="marks" id="marks"></div>
-    </div>
+<div class="intro" id="intro">
+  <div class="intro-head">
+    <p class="intro-kicker">EOLMI · HOLOGRAM BRIEFING</p>
+    <div class="intro-num" id="introNum">11.22</div>
+    <p class="intro-sub" id="introSub"></p>
   </div>
+  <button class="intro-play" id="btnStartSound" type="button" aria-label="브리핑 재생">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.1v13.8L19.4 12z" fill="currentColor"/></svg>
+  </button>
+  <button class="intro-silent" id="btnStartSilent" type="button">소리 없이 3D만 보기</button>
+</div>
 
-  <nav class="badges" id="badges" aria-label="브리핑 단계"></nav>
+<div class="subtitle" id="subtitle" aria-live="polite"></div>
 
-  <section class="caption" id="caption" aria-live="polite">
-    <div class="cap-head">
-      <span class="cap-no" id="capNo">01</span>
-      <span class="cap-title" id="capTitle">수도권 · 시흥 배곧</span>
-    </div>
-    <div class="cap-big" id="capBig">−3° ~ 5°</div>
-    <div class="cap-sub" id="capSub">맑음 · 강수 0%</div>
-    <div class="cap-text" id="capText"></div>
-    <div class="cap-metrics" id="capMetrics"></div>
-  </section>
-
-  <div class="controls">
-    <button class="btn btn-primary" id="btnPlay" type="button">▶ 브리핑 재생</button>
-    <button class="btn btn-icon" id="btnRestart" type="button" aria-label="다시보기" title="다시보기">↺</button>
-    <button class="btn btn-icon on" id="btnMute" type="button" aria-label="소리 끄기" title="소리">
-      <svg class="ico ico-on" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 9.5h3.2L12 6v12L7.2 14.5H4z" fill="currentColor"/><path d="M15.5 8.6a4.6 4.6 0 0 1 0 6.8M18 6.2a7.6 7.6 0 0 1 0 11.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-      <svg class="ico ico-off" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 9.5h3.2L12 6v12L7.2 14.5H4z" fill="currentColor"/><path d="M15.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
-    </button>
+<main class="player" id="player">
+  <button class="p-btn" id="btnPlay" type="button" aria-label="재생">
+    <svg class="ico-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.1v13.8L19.4 12z" fill="currentColor"/></svg>
+    <svg class="ico-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.6 5h3.1v14H7.6zM13.3 5h3.1v14h-3.1z" fill="currentColor"/></svg>
+    <svg class="ico-restart" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.2V2.4L7.2 6.1 12 9.8V7a5.3 5.3 0 1 1-5.3 5.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <div class="p-track" id="track" role="slider" aria-label="재생 위치" aria-valuemin="0" aria-valuemax="45" aria-valuenow="0" tabindex="0">
+    <div class="p-fill" id="fill"></div>
+    <div class="p-marks" id="marks"></div>
   </div>
+  <span class="p-time" id="tNow">0:00</span>
+  <button class="p-ico on" id="btnRestart" type="button" aria-label="다시보기" title="다시보기">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.2V2.4L7.2 6.1 12 9.8V7a5.3 5.3 0 1 1-5.3 5.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <button class="p-ico on" id="btnMute" type="button" aria-label="소리 끄기" title="소리">
+    <svg class="ico-on" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.6 9.3h3.2L11.4 5.6v12.8L6.8 14.7H3.6z" fill="currentColor"/>
+      <path d="M14.6 8.8a4.2 4.2 0 0 1 0 6.4M17.1 6.4a7.6 7.6 0 0 1 0 11.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3.6 9.3h3.2L11.4 5.6v12.8L6.8 14.7H3.6z" fill="currentColor"/>
+      <path d="M14.8 9.4l4.6 5.2m0-5.2l-4.6 5.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+  </button>
 </main>
 
-<!-- 인트로: 모바일 자동재생 차단 때문에 터치 한 번으로 시작 -->
-<div class="intro" id="intro" role="dialog" aria-modal="true" aria-labelledby="introTitle">
-  <div class="intro-card">
-    <p class="intro-kicker">EOLMI · HOLOGRAM BRIEFING</p>
-    <h1 id="introTitle">오늘의 시장을<br><span>홀로그램</span>으로</h1>
-    <p class="intro-date" id="introDate">2026.11.22 (일) · 약 45초</p>
-    <ul class="intro-list" id="introList"></ul>
-    <div class="intro-actions">
-      <button class="btn btn-primary" id="btnStartSound" type="button">▶ 홀로그램 브리핑 시작</button>
-      <button class="btn" id="btnStartSilent" type="button">소리 없이 3D만 보기</button>
-    </div>
-    <p class="intro-note">음성은 AI가 읽습니다. 이어폰이나 작은 볼륨을 권장합니다.<br>데이터 <code id="introAsOf">2026-11-22 아침 브리핑</code></p>
-  </div>
+<div class="no3d-fallback" id="no3dCap" aria-hidden="true">
+  <div class="n-big" id="nfBig"></div>
+  <div class="n-sub" id="nfSub"></div>
+  <div class="n-cap" id="nfCap"></div>
 </div>
 
 <div class="toast" id="toast" role="status"></div>
 
 <audio id="voice" preload="auto" playsinline></audio>
-<script type="module" src="hologram.js?v=20261122m"></script>
+<script type="module" src="hologram.js?v=20261122q"></script>
 <script>
   // 모듈/CDN 로딩이 막힌 환경: 3D 없이 자막·음성만이라도 돌게 한다.
   setTimeout(function () {

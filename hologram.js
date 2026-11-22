@@ -1,8 +1,11 @@
-/* ============================================================
-   얼미리서치 · 3D 홀로그램 브리핑
-   - data/briefing-hologram.json 하나로 텍스트·수치·타임라인·음성을 관리
-   - Three.js(CDN, importmap)로 홀로그램 씬, 실패하면 자막+음성만으로 동작
-   ============================================================ */
+/* =============================================================
+   얼미리서치 · 얼미 브리핑
+   J.A.R.V.I.S 스타일 3D 홀로그램 브리핑
+   - Three.js: 프레넬 셸 + 지오데식 와이어프레임 + 분할 아크 링 + 노드 네트워크
+   - WebAudio AnalyserNode: 음성 진폭/대역에 반응하는 코어·링·지평선 파동
+   - 단계 전환: 깊은 Z축에서 fly-in / fly-out
+   - data/briefing-hologram.json 의 텍스트·수치·타임라인·음성만 사용
+   ============================================================= */
 window.__holoBooted = true;
 
 const DATA_URL = 'data/briefing-hologram.json';
@@ -10,14 +13,15 @@ const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (s) => {
   s = Math.max(0, s || 0);
   const m = Math.floor(s / 60), r = Math.floor(s % 60);
-  return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+  return m + ':' + String(r).padStart(2, '0');
 };
-const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const voiceEl = $('voice');
 const state = {
   t: 0,
@@ -34,11 +38,15 @@ let DOC = null;
 let STAGES = [];
 let THREE = null;
 let sceneApi = null;
+let composer = null;
 let speechOn = false;
+
+/* 음성 반응 상태 (scene 과 공유) */
+const AUDIO = { level: 0, low: 0, mid: 0, high: 0, live: false };
 
 /* ---------------- 부트 ---------------- */
 boot().catch((err) => {
-  console.error(err);
+  console.error('[holo]', err);
   document.body.classList.add('no3d');
   toast('브리핑 데이터를 불러오지 못했습니다. 새로고침해 주세요.');
 });
@@ -49,16 +57,14 @@ async function boot() {
   DOC = await res.json();
   STAGES = Array.isArray(DOC.stages) ? DOC.stages : [];
   if (!STAGES.length) throw new Error('stages empty');
-
-  // 타임라인이 비어 있으면 문단 길이 균등 분배
   if (STAGES.some((s) => s.start == null)) equalizeTimeline();
   state.duration = Number(DOC.audio && DOC.audio.duration) || STAGES[STAGES.length - 1].end || 45;
 
   buildHud();
   setupAudio();
   bindControls();
+  renderCaption(0);
 
-  // 3D 씬 (실패해도 HUD·음성은 계속)
   try {
     THREE = await import('three');
     sceneApi = await initScene(THREE);
@@ -68,8 +74,7 @@ async function boot() {
     toast('3D를 표시할 수 없어 음성·자막으로 재생합니다.');
   }
 
-  // 인트로 뒤에서도 씬이 천천히 보이도록 날씨 파트를 미리 세운다
-  setStage(0, true);
+  window.__holoAudio = AUDIO;
   requestAnimationFrame(loop);
   loadBloom();
 }
@@ -81,49 +86,27 @@ function equalizeTimeline() {
 
 /* ---------------- HUD ---------------- */
 function buildHud() {
-  $('hudDate').textContent = (DOC.date || '').replace(/-/g, '.');
-  $('hudWeekday').textContent = DOC.weekday || '';
-  $('tTotal').textContent = fmt(state.duration);
-  $('introDate').textContent = (DOC.date || '').replace(/-/g, '.') + ' (' + (DOC.weekday || '') + ') · 약 ' + Math.round(state.duration) + '초';
-  $('introAsOf').textContent = DOC.as_of || '';
+  const ymd = String(DOC.date || '').split('-').join('. ');
+  const wd = DOC.weekday || '';
+  $('hudDate').textContent = ymd + (wd ? ' · ' + wd + '요일' : '');
+  $('introNum').textContent = String(DOC.date || '').slice(5).replace('-', '.');
+  $('introSub').textContent = (DOC.weekday ? DOC.weekday + '요일 · ' : '') + '약 ' + Math.round(state.duration) + '초';
+  $('track').setAttribute('aria-valuemax', String(Math.round(state.duration)));
 
-  $('badges').innerHTML = STAGES.map((s, i) =>
-    '<button class="badge" type="button" data-i="' + i + '"><em>' + esc(s.no || String(i + 1).padStart(2, '0')) + '</em>' + esc(s.badge || s.id) + '</button>'
+  $('marks').innerHTML = STAGES.map((s) =>
+    '<i style="left:' + ((s.start / state.duration) * 100).toFixed(2) + '%"></i>'
   ).join('');
-
-  $('marks').innerHTML = STAGES.map((s) => '<i style="left:' + ((s.start / state.duration) * 100).toFixed(2) + '%"></i>').join('');
-
-  $('introList').innerHTML = STAGES.slice(0, 5).map((s) =>
-    '<li><em>' + esc(s.no || '') + '</em>' + esc(s.badge || '') + '<b>' + esc(s.headline || '') + '</b></li>'
-  ).join('');
-
-  $('badges').addEventListener('click', (e) => {
-    const b = e.target.closest('.badge');
-    if (!b) return;
-    jumpTo(Number(b.dataset.i));
-  });
-
-  renderCaption(0, true);
 }
 
-function renderCaption(i, silent) {
+/* 자막 · 무3D 폴백 */
+function renderCaption(i) {
   const s = STAGES[i];
   if (!s) return;
   document.documentElement.style.setProperty('--stage-accent', s.accent || '#7cf5c8');
-  $('capNo').textContent = s.no || String(i + 1).padStart(2, '0');
-  $('capTitle').textContent = s.title || '';
-  $('capBig').textContent = s.headline || '';
-  $('capSub').textContent = s.sub || '';
-  $('capText').textContent = s.caption || '';
-  const metricLimit = window.innerWidth < 480 ? 3 : 4;
-  const metrics = (s.metrics || []).slice(0, metricLimit).map((m) =>
-    '<span>' + esc(m.label) + '<b>' + esc(m.value) + '</b></span>'
-  ).join('');
-  $('capMetrics').innerHTML = metrics;
-  [...$('badges').children].forEach((b, k) => {
-    b.classList.toggle('on', k === i);
-    b.classList.toggle('done', k < i);
-  });
+  $('subtitle').innerHTML = esc(s.caption || '');
+  $('nfBig').textContent = s.headline || '';
+  $('nfSub').textContent = s.sub || '';
+  $('nfCap').textContent = s.caption || '';
 }
 
 function toast(msg) {
@@ -135,11 +118,45 @@ function toast(msg) {
   toast._t = setTimeout(() => t.classList.remove('show'), 4200);
 }
 
-/* ---------------- 오디오 · 재생 엔진 ---------------- */
+/* =============================================================
+   오디오 — AnalyserNode + 음성 리듬 합성 fallback
+   ============================================================= */
+let actx = null;
+let analyser = null;
+let mediaSrc = null;
+let freqData = null;
+
+function ensureAudioGraph() {
+  if (actx) return;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    actx = new Ctx();
+    mediaSrc = actx.createMediaElementSource(voiceEl);
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.72;
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    mediaSrc.connect(analyser);
+    analyser.connect(actx.destination); // 반드시: 소리가 끊기지 않게
+  } catch (e) {
+    console.warn('[holo] WebAudio 사용 불가:', e);
+    actx = null; analyser = null; mediaSrc = null; freqData = null;
+  }
+}
+
+/* 사용자 클릭 핸들러 안에서 호출: 오디오 잠금 해제 */
+function unlockAudio() {
+  ensureAudioGraph();
+  if (actx && actx.state !== 'running') {
+    const p = actx.resume();
+    if (p && p.catch) p.catch(() => { });
+  }
+}
+
 function setupAudio() {
   const src = DOC.audio && DOC.audio.src;
   if (!src) return;
-
   voiceEl.addEventListener('canplay', () => { state.audioOk = true; }, { once: true });
   voiceEl.addEventListener('error', () => {
     if (state.audioOk) return;
@@ -148,13 +165,65 @@ function setupAudio() {
   });
   voiceEl.addEventListener('ended', () => { if (state.playing) finish(); });
   voiceEl.src = src;
-
-  // 파일이 이미 준비된 경우
   if (voiceEl.readyState >= 2) state.audioOk = true;
 }
 
+/* 음성 리듬 합성 (무음 모드 · WebAudio 제한 환경) */
+function synthLevel(now) {
+  if (!state.started) return 0.085 + 0.035 * Math.sin(now * 1.25) + 0.015 * Math.sin(now * 0.57);
+  if (!state.playing) return 0.05 + 0.018 * Math.sin(now * 0.9);
+  const s = STAGES[state.idx] || STAGES[0];
+  const len = Math.max(0.4, (s.end || 10) - (s.start || 0));
+  const p = clamp((state.t - (s.start || 0)) / len, 0, 1);
+  const env = 0.55 + 0.45 * Math.sin(Math.PI * Math.pow(p, 0.85));
+  const syl = Math.pow(Math.abs(Math.sin(now * Math.PI * 6.1)), 0.85);
+  const syl2 = 0.5 + 0.5 * Math.sin(now * 11.3 + 1.7);
+  const gate = 0.5 + 0.5 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.85 + 2.2), 2);
+  return clamp((0.1 + 0.72 * syl * (0.7 + 0.3 * syl2)) * env * (0.55 + 0.45 * gate), 0.04, 1);
+}
+
+/* 매 프레임 음성 분석 */
+function sampleAudio(dt, now) {
+  const hasAudio = state.playing && state.sound && state.audioOk &&
+    !voiceEl.paused && !voiceEl.ended && voiceEl.readyState >= 2;
+  let target = 0, low = 0, mid = 0, high = 0, live = false;
+
+  if (analyser && actx && actx.state === 'running' && hasAudio) {
+    analyser.getByteFrequencyData(freqData);
+    const n = freqData.length;
+    let acc = 0, l = 0, m = 0, h = 0, ln = 0, mn = 0, hn = 0;
+    for (let i = 1; i < n; i++) {
+      const v = freqData[i] / 255;
+      acc += v;
+      if (i < 9) { l += v; ln++; } else if (i < 42) { m += v; mn++; } else { h += v; hn++; }
+    }
+    low = ln ? clamp(l / ln * 1.5, 0, 1) : 0;
+    mid = mn ? clamp(m / mn * 1.9, 0, 1) : 0;
+    high = hn ? clamp(h / hn * 2.6, 0, 1) : 0;
+    target = clamp((acc / (n - 1)) * 2.5, 0, 1);
+    live = true;
+  } else {
+    target = synthLevel(now);
+    low = target * 0.85;
+    mid = target;
+    high = target * 0.55;
+  }
+  if (state.playing) target = Math.max(target, 0.055);
+
+  const ka = 1 - Math.exp(-dt * 22);
+  const kr = 1 - Math.exp(-dt * 5.2);
+  AUDIO.level += (target - AUDIO.level) * (target > AUDIO.level ? ka : kr);
+  const kb = 1 - Math.exp(-dt * 12);
+  AUDIO.low = lerp(AUDIO.low, low, kb);
+  AUDIO.mid = lerp(AUDIO.mid, mid, kb);
+  AUDIO.high = lerp(AUDIO.high, high, kb);
+  AUDIO.live = live;
+}
+
+/* =============================================================
+   재생 엔진
+   ============================================================= */
 function setSound(on) {
-  if (state.sound === on) return;
   state.sound = on;
   const btn = $('btnMute');
   btn.classList.toggle('on', on);
@@ -163,37 +232,42 @@ function setSound(on) {
     try { voiceEl.pause(); } catch (e) { }
     stopSpeech();
   } else if (state.playing) {
+    unlockAudio();
     if (state.audioOk) {
       try { voiceEl.currentTime = Math.min(state.t, state.duration - 0.1); } catch (e) { }
       voiceEl.play().catch(() => { state.audioOk = false; speakStage(); });
-    } else {
-      speakStage();
-    }
+    } else speakStage();
   }
 }
 
 function startPlayback(withSound) {
+  unlockAudio(); // 사용자 제스처 안에서 오디오 잠금 해제
   state.sound = withSound;
-  const btn = $('btnMute');
-  btn.classList.toggle('on', withSound);
-  btn.setAttribute('aria-label', withSound ? '소리 끄기' : '소리 켜기');
+  const mb = $('btnMute');
+  mb.classList.toggle('on', withSound);
+  mb.setAttribute('aria-label', withSound ? '소리 끄기' : '소리 켜기');
 
   $('intro').classList.add('hide');
+  $('subtitle').classList.add('show');
+  document.body.classList.add('started');
   state.started = true;
   state.done = false;
-  document.body.classList.remove('is-done');
-  if (state.t >= state.duration - 0.05) state.t = 0;
+  state.t = 0;
+  state.idx = -1;
   state.playing = true;
-  updatePlayBtn();
+  $('player').classList.remove('done');
+  $('player').classList.add('playing');
+  setStage(0);
+  updateTime();
 
-  if (state.sound) {
+  if (withSound) {
     if (state.audioOk) {
-      try { voiceEl.currentTime = state.t; } catch (e) { }
+      try { voiceEl.currentTime = 0; } catch (e) { }
       const p = voiceEl.play();
       if (p && p.catch) p.catch(() => { state.audioOk = false; toast('소리를 켤 수 없어 기기 음성으로 읽습니다.'); speakStage(); });
-    } else {
-      speakStage();
-    }
+    } else speakStage();
+  } else {
+    stopSpeech();
   }
 }
 
@@ -205,15 +279,17 @@ function togglePlay() {
 
 function pause() {
   state.playing = false;
+  $('player').classList.remove('playing');
   try { voiceEl.pause(); } catch (e) { }
   stopSpeech();
-  updatePlayBtn();
 }
 
 function resume() {
   if (state.done) { restart(); return; }
+  unlockAudio();
   state.playing = true;
-  updatePlayBtn();
+  $('player').classList.add('playing');
+  $('player').classList.remove('done');
   if (state.sound) {
     if (state.audioOk) {
       try { voiceEl.currentTime = Math.min(state.t, state.duration - 0.1); } catch (e) { }
@@ -223,35 +299,37 @@ function resume() {
 }
 
 function restart() {
+  unlockAudio();
   state.t = 0;
   state.done = false;
-  document.body.classList.remove('is-done');
   state.idx = -1;
+  state.started = true;
+  state.playing = true;
+  $('player').classList.remove('done');
+  $('player').classList.add('playing');
+  $('subtitle').classList.add('show');
   setStage(0, true);
   try { voiceEl.currentTime = 0; } catch (e) { }
-  state.playing = true;
-  updatePlayBtn();
   if (state.sound) {
-    if (state.audioOk) { voiceEl.play().catch(() => { }); } else speakStage();
+    if (state.audioOk) voiceEl.play().catch(() => { state.audioOk = false; speakStage(); });
+    else speakStage();
   }
+  updateTime();
 }
 
 function finish() {
   state.playing = false;
   state.done = true;
   state.t = state.duration;
-  document.body.classList.add('is-done');
-  $('btnPlay').textContent = '↺ 다시보기';
+  $('player').classList.remove('playing');
+  $('player').classList.add('done');
   $('fill').style.width = '100%';
-  updateTimeLabel();
+  $('tNow').textContent = fmt(state.t);
+  try { voiceEl.pause(); } catch (e) { }
   stopSpeech();
 }
 
-function updatePlayBtn() {
-  $('btnPlay').textContent = state.playing ? '일시정지' : (state.done ? '↺ 다시보기' : (state.started ? '▶ 이어서 재생' : '▶ 브리핑 재생'));
-}
-
-function updateTimeLabel() {
+function updateTime() {
   $('tNow').textContent = fmt(state.t);
   $('fill').style.width = (clamp(state.t / state.duration, 0, 1) * 100).toFixed(2) + '%';
   $('track').setAttribute('aria-valuenow', Math.round(state.t));
@@ -260,18 +338,23 @@ function updateTimeLabel() {
 function jumpTo(i) {
   const s = STAGES[i];
   if (!s) return;
-  state.t = Math.max(0, s.start - 0.12);
+  if (!state.started) {
+    state.started = true;
+    $('intro').classList.add('hide');
+    $('subtitle').classList.add('show');
+    state.playing = true;
+    $('player').classList.add('playing');
+    unlockAudio();
+  }
+  state.t = Math.max(0, s.start - 0.1);
   state.done = false;
-  document.body.classList.remove('is-done');
-  if (!state.started) { $('intro').classList.add('hide'); state.started = true; state.playing = true; }
+  $('player').classList.remove('done');
+  state.idx = -1;
   setStage(i);
-  updateTimeLabel();
-  updatePlayBtn();
-  if (state.playing) {
-    if (state.sound && state.audioOk) {
-      try { voiceEl.currentTime = state.t; } catch (e) { }
-      voiceEl.play().catch(() => { state.audioOk = false; speakStage(); });
-    } else if (state.sound) speakStage();
+  updateTime();
+  if (state.playing && state.sound && state.audioOk) {
+    try { voiceEl.currentTime = state.t; } catch (e) { }
+    voiceEl.play().catch(() => { state.audioOk = false; speakStage(); });
   }
 }
 
@@ -294,7 +377,7 @@ function stopSpeech() {
   speechOn = false;
 }
 
-/* ---------------- 컨트롤 바인딩 ---------------- */
+/* ---------------- 컨트롤 ---------------- */
 function bindControls() {
   $('btnStartSound').addEventListener('click', () => startPlayback(true));
   $('btnStartSilent').addEventListener('click', () => startPlayback(false));
@@ -302,22 +385,20 @@ function bindControls() {
   $('btnRestart').addEventListener('click', restart);
   $('btnMute').addEventListener('click', () => setSound(!state.sound));
 
-  // 진행 바: 누르고 드래그해서 이동
   const track = $('track');
   let dragging = false;
-  const seekFromEvent = (e) => {
+  const seekFrom = (e) => {
     const r = track.getBoundingClientRect();
     const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-    const ratio = clamp(x / r.width, 0, 0.999);
-    seek(ratio * state.duration);
+    seek(clamp(x / r.width, 0, 0.999) * state.duration);
   };
-  track.addEventListener('pointerdown', (e) => { dragging = true; track.setPointerCapture(e.pointerId); seekFromEvent(e); });
-  track.addEventListener('pointermove', (e) => { if (dragging) seekFromEvent(e); });
+  track.addEventListener('pointerdown', (e) => { dragging = true; track.setPointerCapture(e.pointerId); seekFrom(e); });
+  track.addEventListener('pointermove', (e) => { if (dragging) seekFrom(e); });
   track.addEventListener('pointerup', () => { dragging = false; });
   track.addEventListener('pointercancel', () => { dragging = false; });
 
   document.addEventListener('keydown', (e) => {
-    if (e.target.matches('input,textarea')) return;
+    if (e.target && e.target.matches && e.target.matches('input,textarea')) return;
     if (e.code === 'Space') { e.preventDefault(); if (!state.started) startPlayback(state.sound); else togglePlay(); }
     if (e.code === 'ArrowRight' && state.idx < STAGES.length - 1) jumpTo(state.idx + 1);
     if (e.code === 'ArrowLeft' && state.idx > 0) jumpTo(state.idx - 1);
@@ -331,34 +412,43 @@ function bindControls() {
 }
 
 function seek(t) {
+  if (!state.started) {
+    state.started = true;
+    $('intro').classList.add('hide');
+    $('subtitle').classList.add('show');
+  }
   state.t = clamp(t, 0, state.duration - 0.05);
   state.done = false;
-  document.body.classList.remove('is-done');
-  if (state.sound && state.audioOk) {
-    try { voiceEl.currentTime = state.t; } catch (e) { }
-  }
-  syncStage();
-  updateTimeLabel();
-  updatePlayBtn();
+  $('player').classList.remove('done');
+  unlockAudio();
+  if (state.sound && state.audioOk) { try { voiceEl.currentTime = state.t; } catch (e) { } }
+  syncStage(true);
+  updateTime();
 }
 
 /* ---------------- 타임라인 루프 ---------------- */
 let lastTs = 0;
 function loop(ts) {
-  const dt = lastTs ? Math.min(0.25, (ts - lastTs) / 1000) : 0.016;
+  if (!lastTs) lastTs = ts;
+  const dt = Math.min(0.1, Math.max(0.001, (ts - lastTs) / 1000));
   lastTs = ts;
   const now = ts / 1000;
 
+  sampleAudio(dt, now);
+
   if (state.playing) {
-    if (state.sound && state.audioOk && !voiceEl.paused && !voiceEl.ended) {
-      // 음성이 기준 시계
+    if (state.sound && state.audioOk && !voiceEl.paused && !voiceEl.ended && voiceEl.readyState >= 2) {
       state.t = voiceEl.currentTime;
     } else {
       state.t += dt;
     }
-    if (state.t >= state.duration - 0.03) finish();
-    syncStage();
-    updateTimeLabel();
+    if (state.t >= state.duration - 0.02) {
+      state.t = state.duration;
+      finish();
+    } else {
+      syncStage();
+    }
+    updateTime();
   }
 
   if (sceneApi) sceneApi.update(dt, now, state);
@@ -373,311 +463,537 @@ function setStage(i, immediate) {
   if (sceneApi) sceneApi.setStage(i, immediate);
 }
 
-function syncStage() {
+function syncStage(force) {
   const t = state.t;
   let i = STAGES.length - 1;
   for (let k = 0; k < STAGES.length; k++) {
-    if (t < STAGES[k].end - 0.01) { i = k; break; }
+    if (t < (STAGES[k].end || 0) - 0.01) { i = k; break; }
   }
-  if (i !== state.idx) setStage(i);
+  if (i !== state.idx || force) setStage(i);
 }
 
-/* ---------------- Three.js 씬 ---------------- */
-async function initScene(T) {
+/* =============================================================
+   Three.js 씬
+   ============================================================= */
+function initScene(T) {
   const canvas = $('holo-canvas');
   const renderer = new T.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
   const isPhone = Math.min(window.innerWidth, window.innerHeight) < 560;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhone ? 1.8 : 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhone ? 1.7 : 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.toneMapping = T.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.92;
+  renderer.toneMappingExposure = 0.9;
+  renderer.outputColorSpace = T.SRGBColorSpace;
 
   const scene = new T.Scene();
-  scene.background = new T.Color(0x03080a);
-  scene.fog = new T.FogExp2(0x04120f, 0.062);
+  scene.background = new T.Color(0x020906);
 
-  const camera = new T.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 120);
-  const isPortrait = () => window.innerWidth / window.innerHeight < 0.75;
-  const fit = () => (isPortrait() ? 11.6 : 10.1);
-  let fitZ = fit();
-  const world = new T.Group();
-  if (isPortrait()) {
-    world.position.y = 1.15;
-    world.scale.setScalar(0.92);
-  }
-  scene.add(world);
-  camera.position.set(0, 2.5, fitZ);
+  const FOV = 42;
+  const camera = new T.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 0.1, 200);
+  const layout = { d: 6, frac: 0.5, aspect: 1.6, w: 1, h: 1 };
+  const pointer = { x: 0, y: 0 };
 
-  /* --- 조명 --- */
-  scene.add(new T.HemisphereLight(0x9ff7ff, 0x04120f, 0.55));
-  const key = new T.PointLight(0x7cf5c8, 16, 26, 2);
-  key.position.set(2.5, 6, 4);
-  scene.add(key);
-  const rim = new T.DirectionalLight(0x66d9ff, 0.35);
-  rim.position.set(-4, 3, -5);
-  scene.add(rim);
-
-  /* --- 바닥: 네온 그리드 --- */
-  // 바닥 거울 반사 (가볍게 깔고 어둡게 덮어 홀로그램 잔상처럼)
-  let mirror = null;
-  try {
-    const { Reflector } = await import('three/addons/objects/Reflector.js');
-    mirror = new Reflector(new T.CircleGeometry(22, 64), {
-      clipBias: 0.003,
-      textureWidth: isPhone ? 512 : 1024,
-      textureHeight: isPhone ? 512 : 1024,
-      color: 0x0a1a18,
-    });
-    mirror.rotation.x = -Math.PI / 2;
-    mirror.position.y = 0.0;
-    scene.add(mirror);
-    const dim = new T.Mesh(
-      new T.CircleGeometry(22, 64),
-      new T.MeshBasicMaterial({ color: 0x02080a, transparent: true, opacity: 0.44, depthWrite: false })
-    );
-    dim.rotation.x = -Math.PI / 2;
-    dim.position.y = 0.002;
-    scene.add(dim);
-  } catch (e) {
-    console.warn('[holo] 바닥 반사 생략:', e);
-  }
-
-  const gridUniforms = {
+  /* ---------- 배경 셰이더: 깊은 공간 + 지평선 + 물결 반사 ---------- */
+  const bgU = {
+    uRes: { value: new T.Vector2(1, 1) },
     uTime: { value: 0 },
-    uColor: { value: new T.Color(0x7cf5c8) },
+    uLevel: { value: 0 },
+    uCoreX: { value: 0.5 },
+    uCoreY: { value: 0.42 },
+    uHorizon: { value: 0.68 },
     uAccent: { value: new T.Color(0x7cf5c8) },
   };
-  const gridMat = new T.ShaderMaterial({
-    uniforms: gridUniforms,
-    transparent: true,
+  const bgMat = new T.ShaderMaterial({
+    uniforms: bgU,
+    depthTest: false,
     depthWrite: false,
-    blending: T.AdditiveBlending,
     vertexShader: `
-      varying vec3 vPos;
+      varying vec2 vUv;
       void main(){
-        vec4 wp = modelMatrix * vec4(position,1.0);
-        vPos = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        vUv = uv;
+        gl_Position = vec4(position.xy, 0.999, 1.0);
       }`,
     fragmentShader: `
-      uniform float uTime; uniform vec3 uColor;
-      varying vec3 vPos;
-      float grid(vec2 p, float s, float w){
-        vec2 q = p * s;
-        vec2 fw = fwidth(q);
-        vec2 d = abs(fract(q - 0.5) - 0.5) / max(fw, vec2(1e-4));
-        float l = min(d.x, d.y);
-        float line = 1.0 - clamp(l / w, 0.0, 1.0);
-        float cellPx = 1.0 / max(max(fw.x, fw.y), 1e-5);
-        return line * smoothstep(1.2, 5.0, cellPx);
-      }
+      precision highp float;
+      uniform vec2 uRes;
+      uniform float uTime;
+      uniform float uLevel;
+      uniform float uCoreX;
+      uniform float uCoreY;
+      uniform float uHorizon;
+      uniform vec3 uAccent;
+      varying vec2 vUv;
+
       void main(){
-        float r = length(vPos.xz);
-        float dist = length(cameraPosition - vPos);
-        float f1 = grid(vPos.xz, 2.2, 1.0);
-        float f2 = grid(vPos.xz, 11.0, 1.5);
-        float fadeR = smoothstep(18.0, 2.0, r);
-        float fadeD = 1.0 - smoothstep(11.0, 26.0, dist);
-        float ripple = 0.5 + 0.5 * sin(r * 0.8 - uTime * 0.7);
-        float a = (f1 * 0.035 + f2 * 0.085 + 0.002) * fadeR * fadeD * (0.78 + 0.22 * ripple);
-        vec3 col = mix(uColor, vec3(0.55,0.88,1.0), f2 * 0.6);
-        gl_FragColor = vec4(col, a);
+        float y = 1.0 - vUv.y;
+        float x = vUv.x;
+        float aspect = uRes.x / max(1.0, uRes.y);
+        vec2 cp = vec2((x - uCoreX) * aspect, y - uCoreY);
+        float cd = length(cp);
+
+        vec3 top = vec3(0.0012, 0.0052, 0.0042);
+        vec3 mid = vec3(0.0040, 0.0190, 0.0150);
+        vec3 bot = vec3(0.0008, 0.0032, 0.0028);
+        vec3 col = mix(top, mid, smoothstep(0.0, uHorizon, y));
+        col = mix(col, bot, smoothstep(uHorizon, min(1.0, uHorizon + 0.34), y));
+
+        col += vec3(0.006, 0.030, 0.024) * exp(-abs(y - uHorizon) * 7.0);
+
+        col += uAccent * exp(-cd * 4.6) * (0.026 + 0.055 * uLevel);
+        col += uAccent * exp(-cd * 1.9) * 0.010;
+
+        float py = max(0.0, abs(y - uHorizon) * uRes.y - 0.5);
+        float line = exp(-py * 1.9);
+        float glow = exp(-py * 0.045);
+        float edge = smoothstep(0.0, 0.09, x) * (1.0 - smoothstep(0.91, 1.0, x));
+        col += uAccent * line * 0.62 * edge;
+        col += uAccent * glow * 0.040 * edge;
+
+        if (y > uHorizon) {
+          float d = y - uHorizon;
+          float fade = exp(-d * 7.5);
+          float cx = (x - 0.5) * 2.3;
+          float mask = exp(-cx * cx * 1.35);
+          float w = 0.0;
+          for (int i = 0; i < 6; i++) {
+            float k = float(i);
+            float yy = uHorizon + 0.012 + k * 0.026;
+            float amp = (0.0018 + 0.0009 * k) * (1.0 + 3.2 * uLevel);
+            float ph = uTime * (0.55 + 0.13 * k) + k * 1.7;
+            float wob = sin(x * 15.0 + ph) * amp + sin(x * 6.3 - ph * 0.8 + k) * amp * 0.75;
+            float dd = abs(y - (yy + wob)) * uRes.y;
+            w += (1.0 - smoothstep(0.15, 1.7, dd)) * (0.30 - 0.036 * k);
+          }
+          col += mix(uAccent, vec3(0.32, 0.85, 1.0), 0.25) * w * mask * fade * (0.30 + 0.65 * uLevel);
+
+          float rx = (x - 0.5) * 2.3;
+          float refl = exp(-rx * rx * 2.4) * exp(-d * 10.0);
+          col += uAccent * refl * (0.06 + 0.20 * uLevel);
+        }
+
+        float g = fract(sin(dot(vUv * uRes, vec2(12.9898, 78.233))) * 43758.5453);
+        col += (g - 0.5) * 0.005;
+
+        gl_FragColor = vec4(max(col, 0.0), 1.0);
       }`,
   });
-  const grid = new T.Mesh(new T.PlaneGeometry(60, 60), gridMat);
-  grid.rotation.x = -Math.PI / 2;
-  grid.position.y = 0.005;
-  scene.add(grid);
+  const bg = new T.Mesh(new T.PlaneGeometry(2, 2), bgMat);
+  bg.frustumCulled = false;
+  bg.renderOrder = -100;
+  scene.add(bg);
 
-  // 홀로그램 프로젝터 베이스 링
-  const projector = new T.Group();
-  const ringOuter = new T.Mesh(
-    new T.TorusGeometry(1.62, 0.008, 6, 160),
-    new T.MeshBasicMaterial({ color: 0x7cf5c8, transparent: true, opacity: 0.5, blending: T.AdditiveBlending, depthWrite: false })
-  );
-  ringOuter.rotation.x = -Math.PI / 2;
-  projector.add(ringOuter);
-  const ringInner = new T.Mesh(
-    new T.TorusGeometry(1.18, 0.005, 6, 140),
-    new T.MeshBasicMaterial({ color: 0x66d9ff, transparent: true, opacity: 0.32, blending: T.AdditiveBlending, depthWrite: false })
-  );
-  ringInner.rotation.x = -Math.PI / 2;
-  projector.add(ringInner);
-  const pTicks = new T.Group();
-  for (let i = 0; i < 36; i++) {
-    const a2 = (i / 36) * Math.PI * 2;
-    const tick = new T.Mesh(
-      new T.BoxGeometry(0.008, 0.008, 0.11 + (i % 3) * 0.05),
-      new T.MeshBasicMaterial({ color: 0x9ff7ff, transparent: true, opacity: 0.35, blending: T.AdditiveBlending, depthWrite: false })
-    );
-    tick.position.set(Math.cos(a2) * 1.62, 0, Math.sin(a2) * 1.62);
-    tick.rotation.y = -a2;
-    pTicks.add(tick);
+  /* ---------- 코어 ---------- */
+  const coreU = {
+    uTime: { value: 0 },
+    uLevel: { value: 0 },
+    uAccent: { value: new T.Color(0x7cf5c8) },
+  };
+  const WAVE_GLSL = `
+    float jarvisWave(vec3 p, float t){
+      return sin(p.x * 3.1 + t * 1.15) * sin(p.y * 2.7 - t * 0.85)
+           + 0.55 * sin(p.z * 4.3 + t * 1.9) * sin(p.x * 2.2 - t * 0.6)
+           + 0.30 * sin(p.y * 6.1 + p.z * 3.4 + t * 2.6);
+    }`;
+
+  const core = new T.Group();
+  scene.add(core);
+
+  /* 프레넬 림 + 스캔라인 셸 */
+  const shellMat = new T.ShaderMaterial({
+    uniforms: coreU,
+    transparent: true,
+    depthWrite: false,
+    side: T.DoubleSide,
+    blending: T.AdditiveBlending,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uLevel;
+      varying vec3 vN;
+      varying vec3 vV;
+      varying vec3 vP;
+      ${WAVE_GLSL}
+      void main(){
+        vec3 n = normalize(position);
+        float d = 1.0 + 0.0035 * sin(uTime * 0.95 + n.y * 2.0)
+                      + uLevel * (0.018 + 0.075 * (0.5 + 0.5 * jarvisWave(n, uTime)));
+        vec3 p = n * d;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vN = normalize(normalMatrix * n);
+        vV = normalize(-mv.xyz);
+        vP = p;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 uAccent;
+      uniform float uTime;
+      uniform float uLevel;
+      varying vec3 vN;
+      varying vec3 vV;
+      varying vec3 vP;
+      void main(){
+        float fres = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 4.2);
+        float scan = 0.5 + 0.5 * sin(vP.y * 52.0 - uTime * 3.4);
+        float scan2 = 0.5 + 0.5 * sin(vP.y * 190.0 + uTime * 7.0);
+        float a = fres * 0.14 + scan * 0.014 + scan2 * 0.006;
+        a *= 0.55 + 0.75 * uLevel;
+        gl_FragColor = vec4(uAccent, clamp(a, 0.0, 0.85));
+      }`,
+  });
+  const shell = new T.Mesh(new T.IcosahedronGeometry(1.0, isPhone ? 3 : 4), shellMat);
+  core.add(shell);
+
+  /* 지오데식 와이어프레임 (2겹) */
+  function wireMat(opacity, disp) {
+    return new T.ShaderMaterial({
+      uniforms: {
+        uTime: coreU.uTime,
+        uLevel: coreU.uLevel,
+        uColor: coreU.uAccent,
+        uOpacity: { value: opacity },
+        uDisp: { value: disp },
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: T.AdditiveBlending,
+      vertexShader: `
+        uniform float uTime;
+        uniform float uLevel;
+        uniform float uDisp;
+        varying float vShade;
+        ${WAVE_GLSL}
+        void main(){
+          vec3 n = normalize(position);
+          float d = 1.0 + 0.0030 * sin(uTime * 1.05 + n.y * 2.2)
+                        + uLevel * uDisp * (0.010 + 0.050 * (0.5 + 0.5 * jarvisWave(n, uTime)));
+          vec3 p = n * (length(position) * d);
+          vShade = 0.55 + 0.45 * sin(p.y * 9.0 + uTime * 2.4) * sin(p.x * 7.0 - uTime * 1.6);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+        }`,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uOpacity;
+        varying float vShade;
+        void main(){
+          gl_FragColor = vec4(uColor, uOpacity * (0.72 + 0.28 * vShade));
+        }`,
+    });
   }
-  projector.add(pTicks);
-  projector.position.y = 0.02;
-  scene.add(projector);
+  const wire1 = new T.LineSegments(new T.WireframeGeometry(new T.IcosahedronGeometry(1.012, 2)), wireMat(0.34, 1.0));
+  core.add(wire1);
 
-  // 바닥 중앙 글로우
-  const floorGlowTex = radialTexture(T, 'rgba(124,245,200,0.55)', 'rgba(124,245,200,0)');
-  const floorGlow = new T.Mesh(
-    new T.PlaneGeometry(9, 9),
-    new T.MeshBasicMaterial({ map: floorGlowTex, transparent: true, opacity: 0.1, blending: T.AdditiveBlending, depthWrite: false })
+  const wire2 = new T.LineSegments(new T.WireframeGeometry(new T.IcosahedronGeometry(1.08, 3)), wireMat(0.09, 0.55));
+  core.add(wire2);
+
+  /* 내부 연결 코드(대각선 네트워크) + 노드 */
+  const chordGroup = new T.Group();
+  const chordPos = [];
+  const nodePos = [];
+  for (let i = 0; i < 96; i++) {
+    const a = randomDir(T), b = randomDir(T);
+    const r1 = 0.62 + Math.random() * 0.3, r2 = 0.62 + Math.random() * 0.3;
+    chordPos.push(a.x * r1, a.y * r1, a.z * r1, b.x * r2, b.y * r2, b.z * r2);
+  }
+  for (let i = 0; i < 64; i++) {
+    const d = randomDir(T);
+    nodePos.push(d.x, d.y, d.z);
+  }
+  const chordGeo = new T.BufferGeometry();
+  chordGeo.setAttribute('position', new T.Float32BufferAttribute(chordPos, 3));
+  chordGroup.add(new T.LineSegments(chordGeo, new T.LineBasicMaterial({
+    color: 0x7cf5c8, transparent: true, opacity: 0.07, blending: T.AdditiveBlending, depthWrite: false,
+  })));
+  const nodeGeo = new T.BufferGeometry();
+  nodeGeo.setAttribute('position', new T.Float32BufferAttribute(nodePos, 3));
+  const nodeMat = new T.PointsMaterial({
+    size: 0.028, map: dotTexture(T), color: 0xd8fff4, transparent: true, opacity: 0.85,
+    blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+  });
+  chordGroup.add(new T.Points(nodeGeo, nodeMat));
+  core.add(chordGroup);
+
+  /* 내부 발광 코어 */
+  const glowTex = radialTexture(T, 'rgba(220,255,246,1)', 'rgba(124,245,200,0)');
+  const coreGlow = new T.Sprite(new T.SpriteMaterial({
+    map: glowTex, color: 0x9dffdf, transparent: true, opacity: 0.30,
+    blending: T.AdditiveBlending, depthWrite: false,
+  }));
+  coreGlow.scale.set(1.15, 1.15, 1);
+  core.add(coreGlow);
+
+  const coreGlow2 = new T.Sprite(new T.SpriteMaterial({
+    map: glowTex, color: 0xf2fffa, transparent: true, opacity: 0.22,
+    blending: T.AdditiveBlending, depthWrite: false,
+  }));
+  coreGlow2.scale.set(0.42, 0.42, 1);
+  core.add(coreGlow2);
+
+  const innerOcta = new T.LineSegments(
+    new T.EdgesGeometry(new T.IcosahedronGeometry(0.34, 1)),
+    new T.LineBasicMaterial({ color: 0xd6fff2, transparent: true, opacity: 0.42, blending: T.AdditiveBlending, depthWrite: false })
   );
-  floorGlow.rotation.x = -Math.PI / 2;
-  floorGlow.position.y = 0.012;
-  scene.add(floorGlow);
+  core.add(innerOcta);
 
-  /* --- 떠 있는 입자 --- */
-  const PCOUNT = reduced ? 320 : (isPhone ? 620 : 950);
+  /* 분할 아크 + 방사형 눈금 링 */
+  const rings = [];
+  function ringLayer(cfg) {
+    const g = new T.Group();
+    g.rotation.set(cfg.tilt[0], cfg.tilt[1], cfg.tilt[2]);
+    const mat = new T.MeshBasicMaterial({
+      color: 0x7cf5c8, transparent: true, opacity: cfg.op,
+      blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide,
+    });
+    cfg.arcs.forEach(([from, len]) => {
+      const geo = new T.RingGeometry(cfg.r, cfg.r + cfg.thick, 128, 1, from, len);
+      g.add(new T.Mesh(geo, mat));
+    });
+    if (cfg.ticks) {
+      const tickGeo = new T.BoxGeometry(0.0055, cfg.tickLen, 0.0055);
+      const tickMat = new T.MeshBasicMaterial({
+        color: 0x7cf5c8, transparent: true, opacity: cfg.op * 0.85,
+        blending: T.AdditiveBlending, depthWrite: false,
+      });
+      for (let i = 0; i < cfg.ticks; i++) {
+        const a = (i / cfg.ticks) * Math.PI * 2;
+        const len = cfg.tickLen * (i % 5 === 0 ? 2.0 : 1);
+        const m = new T.Mesh(tickGeo, tickMat);
+        m.scale.y = len / cfg.tickLen;
+        m.position.set(Math.cos(a) * (cfg.r + 0.035), Math.sin(a) * (cfg.r + 0.035), 0);
+        m.rotation.z = a - Math.PI / 2;
+        g.add(m);
+      }
+    }
+    core.add(g);
+    rings.push({ g, cfg, mat, t: Math.random() * 6 });
+    return g;
+  }
+  ringLayer({ r: 1.15, thick: 0.0035, tilt: [1.44, 0.10, 0], speed: 0.20, op: 0.6, arcs: [[0.15, 1.05], [2.35, 0.75], [4.05, 1.15]] });
+  ringLayer({ r: 1.29, thick: 0.0030, tilt: [1.22, 0.42, 0.35], speed: -0.15, op: 0.36, arcs: [[0.4, 1.95], [3.1, 1.35]], ticks: 34, tickLen: 0.045 });
+  ringLayer({ r: 1.38, thick: 0.0026, tilt: [0.50, 0.66, 0.42], speed: 0.09, op: 0.12, arcs: [[0.9, 2.5], [4.3, 0.8]] });
+  ringLayer({ r: 1.04, thick: 0.0022, tilt: [1.50, 0.04, 0.18], speed: -0.06, op: 0.22, arcs: [[0, 4.6]] });
+
+  /* 떠다니는 입자 */
+  const PC = reduced ? 180 : (isPhone ? 420 : 720);
   const pGeo = new T.BufferGeometry();
-  const pPos = new Float32Array(PCOUNT * 3);
-  const pSeed = new Float32Array(PCOUNT);
-  for (let i = 0; i < PCOUNT; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const r = 1.2 + Math.pow(Math.random(), 0.7) * 9.5;
-    pPos[i * 3] = Math.cos(a) * r;
-    pPos[i * 3 + 1] = Math.random() * 8.5;
-    pPos[i * 3 + 2] = Math.sin(a) * r;
-    pSeed[i] = 0.25 + Math.random() * 0.9;
+  const pPos = new Float32Array(PC * 3);
+  const pSeed = new Float32Array(PC);
+  for (let i = 0; i < PC; i++) {
+    const d = randomDir(T);
+    const r = 1.05 + Math.pow(Math.random(), 0.6) * 1.5;
+    pPos[i * 3] = d.x * r;
+    pPos[i * 3 + 1] = d.y * r;
+    pPos[i * 3 + 2] = d.z * r;
+    pSeed[i] = 0.3 + Math.random() * 0.9;
   }
   pGeo.setAttribute('position', new T.BufferAttribute(pPos, 3));
-  const dustTex = radialTexture(T, 'rgba(190,255,240,1)', 'rgba(124,245,200,0)');
-  const dust = new T.Points(pGeo, new T.PointsMaterial({
-    size: 0.058, map: dustTex, color: 0xa8ffe6, transparent: true, opacity: 0.34,
+  const particles = new T.Points(pGeo, new T.PointsMaterial({
+    size: 0.012, map: dotTexture(T), color: 0xa9ffe4, transparent: true, opacity: 0.42,
     blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
   }));
-  scene.add(dust);
+  core.add(particles);
 
-  // 멀리 깔리는 별 먼지
+  /* 아주 먼 별가루 */
   const farGeo = new T.BufferGeometry();
-  const farPos = new Float32Array(300 * 3);
-  for (let i = 0; i < 300; i++) {
-    farPos[i * 3] = (Math.random() - 0.5) * 60;
-    farPos[i * 3 + 1] = Math.random() * 22 - 2;
-    farPos[i * 3 + 2] = -12 - Math.random() * 30;
+  const farPos = new Float32Array(260 * 3);
+  for (let i = 0; i < 260; i++) {
+    const d = randomDir(T);
+    const r = 6 + Math.random() * 16;
+    farPos[i * 3] = d.x * r;
+    farPos[i * 3 + 1] = Math.abs(d.y) * r * 0.7;
+    farPos[i * 3 + 2] = -Math.abs(d.z) * r - 2;
   }
   farGeo.setAttribute('position', new T.BufferAttribute(farPos, 3));
-  const farDust = new T.Points(farGeo, new T.PointsMaterial({
-    size: 0.1, color: 0x88d8ff, transparent: true, opacity: 0.22, blending: T.AdditiveBlending, depthWrite: false,
+  const farStars = new T.Points(farGeo, new T.PointsMaterial({
+    size: 0.03, color: 0x8fe8ff, transparent: true, opacity: 0.24,
+    blending: T.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
   }));
-  scene.add(farDust);
+  scene.add(farStars);
 
-  /* --- 단계별 오브젝트 --- */
-  const groups = STAGES.map((s) => {
-    const g = buildStage(T, s, isPhone, isPortrait());
-    g.vis = 0;
-    g.userData.baseY = g.position.y;
-    fadeMaterials(g);
-    world.add(g);
+  /* ---------- 단계 오버레이 ---------- */
+  const stageRoot = new T.Group();
+  scene.add(stageRoot);
+  const stageGroups = STAGES.map((s) => {
+    const g = buildStage(T, s, { isPhone });
+    g.visible = false;
+    stageRoot.add(g);
     return g;
   });
 
-  /* --- 상태 --- */
+  /* ---------- 상태 ---------- */
+  const MINT = new T.Color(0x7cf5c8);
+  const accentNow = new T.Color(0x7cf5c8);
+  const accentTo = new T.Color(0x7cf5c8);
+
+  function applyCamera() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const aspect = w / h;
+    const diamPx = Math.min(h * 0.54, w * 0.80);
+    const frac = diamPx / h;
+    const d = 1 / (Math.tan((FOV * Math.PI) / 360) * frac);
+    layout.d = d; layout.frac = frac; layout.aspect = aspect; layout.w = w; layout.h = h;
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+    camera.position.set(0, 0, d);
+    camera.lookAt(0, -d * 0.0614, 0);
+    camera.updateMatrixWorld(true);
+
+    const p = new T.Vector3(0, 0, 0).project(camera);
+    const edge = new T.Vector3(0, 1, 0).project(camera);
+    const coreY = 1 - (p.y * 0.5 + 0.5);
+    const radY = Math.abs(edge.y - p.y) * 0.5;
+    bgU.uCoreY.value = coreY;
+    bgU.uHorizon.value = Math.min(0.94, coreY + radY + 0.004);
+    bgU.uCoreX.value = p.x * 0.5 + 0.5;
+
+    const rSize = renderer.getDrawingBufferSize(new T.Vector2());
+    bgU.uRes.value.set(rSize.x, rSize.y);
+
+    const visW = 2 / frac * aspect;
+    const targetW = visW * (aspect < 1 ? 0.86 : 0.44);
+    const proj = d / Math.max(0.2, d - 1.2);
+    const s = clamp(targetW / (3.16 * proj), 0.3, 1.25);
+    stageRoot.scale.set(s, s, 1);
+    const panelY = -0.36 / (s * proj);
+    stageGroups.forEach((g) => {
+      const pc = g.userData.panel;
+      if (!pc) return;
+      pc.position.y = panelY;
+      pc.userData.baseY = panelY;
+    });
+
+    const corePx = Math.round(frac * h);
+    document.documentElement.style.setProperty('--core-d', corePx + 'px');
+
+    renderer.setSize(w, h, false);
+    if (composer) composer.setSize(w, h);
+  }
+  applyCamera();
+
   const api = {
     setStage(i, immediate) {
-      groups.forEach((g, k) => {
+      stageGroups.forEach((g, k) => {
         g.userData.target = k === i ? 1 : 0;
-        if (immediate) { g.vis = g.userData.target; applyVis(g); }
+        if (immediate) { g.userData.v = state.started ? g.userData.target : 0; applyStage(g); }
       });
-      const acc = STAGES[i] && STAGES[i].accent ? STAGES[i].accent : '#7cf5c8';
-      key.color.set(acc);
-      gridUniforms.uColor.value.set(acc);
-      gridUniforms.uAccent.value.set(acc);
+      const acc = (STAGES[i] && STAGES[i].accent) || '#7cf5c8';
+      accentTo.set(acc).lerp(MINT, 0.68);
     },
     update(dt, now, st) {
-      const speed = st.playing ? 1 : 0.32;
-      const t = now;
-      gridUniforms.uTime.value = t * speed;
+      const lvl = AUDIO.level;
+      coreU.uTime.value = now;
+      coreU.uLevel.value = lvl;
+      bgU.uTime.value = now;
+      bgU.uLevel.value = lvl;
 
-      // 단계 그룹 페이드
-      groups.forEach((g, k) => {
-        const target = k === st.idx ? 1 : 0;
-        g.userData.target = target;
-        g.vis = lerp(g.vis, target, Math.min(1, dt * (target ? 5.2 : 7.5)));
-        if (Math.abs(g.vis - target) < 0.002) g.vis = target;
-        applyVis(g);
-        if (g.vis > 0.01 && g.userData.tick) g.userData.tick(t, dt, g.vis, st);
+      accentNow.lerp(accentTo, 1 - Math.exp(-dt * 1.6));
+      coreU.uAccent.value.copy(accentNow);
+      bgU.uAccent.value.copy(accentNow);
+
+      /* 카메라 미세 시선 */
+      const d = layout.d;
+      const sx = Math.sin(now * 0.11) * 0.045 + pointer.x * 0.16;
+      camera.position.x = Math.sin(sx) * d;
+      camera.position.z = Math.cos(sx) * d;
+      camera.position.y = pointer.y * -0.16;
+      camera.lookAt(0, -d * 0.0614 + pointer.y * -0.05, 0);
+
+      /* 코어 호흡 */
+      const pulse = 1 + lvl * 0.065 + Math.sin(now * 0.85) * 0.004;
+      core.scale.setScalar(pulse);
+      core.rotation.y = now * 0.045 * (st.playing ? 1 : 0.45);
+      wire1.rotation.y = now * 0.085;
+      wire1.rotation.x = Math.sin(now * 0.21) * 0.12;
+      wire2.rotation.y = -now * 0.05;
+      wire2.rotation.z = Math.sin(now * 0.17) * 0.1;
+      chordGroup.rotation.y = -now * 0.09;
+      chordGroup.rotation.x = now * 0.03;
+      nodeMat.opacity = 0.55 + 0.4 * lvl;
+      const chordMat = chordGroup.children[0].material;
+      chordMat.opacity = 0.05 + 0.09 * lvl;
+
+      coreGlow.material.opacity = 0.14 + 0.5 * lvl;
+      coreGlow.scale.setScalar(1.05 + lvl * 0.5);
+      coreGlow2.material.opacity = 0.18 + 0.45 * lvl;
+      coreGlow2.scale.setScalar(0.4 + lvl * 0.22);
+      innerOcta.rotation.y = -now * 0.6;
+      innerOcta.rotation.x = now * 0.35;
+      innerOcta.material.opacity = 0.3 + 0.3 * lvl;
+
+      rings.forEach((r, i) => {
+        const sp = r.cfg.speed * (st.playing ? 1 : 0.4) * (1 + lvl * 1.7);
+        r.t += dt * sp;
+        r.g.rotation.z = r.t;
+        const wob = 1 + Math.sin(now * 0.7 + i) * 0.008 + lvl * 0.055;
+        r.g.scale.setScalar(wob);
+        r.mat.opacity = r.cfg.op * (0.72 + 0.5 * lvl);
       });
 
-      // 카메라: 천천히 다가가며 미세 궤도
-      const prog = clamp(st.t / state.duration, 0, 1);
-      const z = (fitZ - 1.15 * easeOut(prog)) + Math.sin(zProg(t)) * 0.08;
-      const ang = Math.sin(t * 0.11) * 0.11;
-      camera.position.x = Math.sin(ang) * z + pointer.x * 0.5;
-      camera.position.z = Math.cos(ang) * z;
-      camera.position.y = 2.7 + Math.sin(t * 0.17) * 0.16 - pointer.y * 0.35;
-      camera.lookAt(0, 1.95 + Math.sin(t * 0.13) * 0.05, 0);
+      particles.rotation.y = now * 0.05;
+      particles.rotation.x = Math.sin(now * 0.13) * 0.1;
+      particles.material.opacity = 0.35 + 0.3 * lvl;
+      farStars.rotation.y = -now * 0.008;
 
-      // 입자 상승
-      const pos = pGeo.attributes.position.array;
-      for (let i = 0; i < PCOUNT; i++) {
-        pos[i * 3 + 1] += dt * speed * (0.18 + pSeed[i] * 0.42);
-        pos[i * 3] += Math.sin(t * 0.4 + i) * dt * 0.012 * speed;
-        if (pos[i * 3 + 1] > 8.6) pos[i * 3 + 1] = 0.05;
-      }
-      pGeo.attributes.position.needsUpdate = true;
-      dust.rotation.y = t * 0.012 * speed;
-      farDust.rotation.y = -t * 0.006 * speed;
-      floorGlow.material.opacity = 0.09 + Math.sin(t * 0.9) * 0.02;
-      projector.rotation.y = t * 0.05 * speed;
-      ringOuter.material.opacity = 0.4 + Math.sin(t * 1.1) * 0.1;
-      ringInner.material.opacity = 0.24 + Math.sin(t * 1.4 + 1) * 0.07;
+      /* 단계 전환 */
+      stageGroups.forEach((g, k) => {
+        const target = (st.started && k === st.idx) ? 1 : 0;
+        g.userData.target = target;
+        const speed = target ? 4.4 : 6.4;
+        g.userData.v = lerp(g.userData.v, target, Math.min(1, dt * speed));
+        if (Math.abs(g.userData.v - target) < 0.0015) g.userData.v = target;
+        applyStage(g);
+        if (g.userData.v > 0.01 && g.userData.tick) g.userData.tick(now, dt, g.userData.v);
+      });
 
       if (composer) composer.render();
       else renderer.render(scene, camera);
     },
   };
 
-  /* --- 후처리(블룸) --- */
-  let composer = null;
-  api.attachBloom = (c) => { composer = c; };
-  api.renderer = renderer;
-  api.scene = scene;
-  api.camera = camera;
+  function applyStage(g) {
+    const v = g.userData.v;
+    const vis = v > 0.004;
+    g.visible = vis;
+    if (!vis) return;
+    (g.userData.layers || []).forEach((c) => {
+      const delay = c.userData.delay || 0;
+      const lv = clamp((v - delay) / Math.max(0.01, 1 - delay), 0, 1);
+      const e = easeOut(lv);
+      c.visible = lv > 0.004;
+      c.position.z = c.userData.baseZ - (1 - e) * 2.9;
+      c.position.y = c.userData.baseY + (1 - e) * 0.16;
+      c.scale.setScalar(0.9 + 0.1 * e);
+      c.rotation.x = c.userData.baseRX + (1 - e) * -0.55;
+      c.traverse((o) => {
+        if (!o.material) return;
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m) => {
+          if (m.userData && m.userData.base != null) m.opacity = m.userData.base * lv;
+        });
+      });
+    });
+  }
 
-  /* --- 리사이즈 --- */
   const onResize = () => {
-    const w = window.innerWidth, h = window.innerHeight;
-    camera.aspect = w / h;
-    fitZ = fit();
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
-    if (composer) composer.setSize(w, h);
+    applyCamera();
+    requestAnimationFrame(() => { applyCamera(); });
   };
   window.addEventListener('resize', onResize);
   window.addEventListener('orientationchange', () => setTimeout(onResize, 220));
-
-  const pointer = { x: 0, y: 0 };
   window.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'touch') return;
     pointer.x = (e.clientX / window.innerWidth - 0.5) * 2;
     pointer.y = (e.clientY / window.innerHeight - 0.5) * 2;
   });
 
-  api.setStage(state.idx < 0 ? 0 : state.idx, true);
+  api.setStage(0, true);
+  api.renderer = renderer;
+  api.scene = scene;
+  api.camera = camera;
+  api.attachComposer = (c) => { composer = c; };
   return api;
-
-  function applyVis(g) {
-    const v = g.vis;
-    g.visible = v > 0.004;
-    g.scale.setScalar(0.82 + 0.18 * easeOut(clamp(v, 0, 1)));
-    g.position.y = (g.userData.baseY || 0) + (1 - v) * 0.55;
-    g.rotation.y = g.userData.baseRotY || 0;
-    g.traverse((o) => {
-      if (!o.material) return;
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach((m) => {
-        if (m.userData.base == null) return;
-        m.opacity = m.userData.base * clamp(v, 0, 1);
-      });
-    });
-  }
 }
 
-function zProg(t) { return t * 0.25; }
-
-/* 블룸은 별도 시도: 실패해도 기본 렌더로 계속 */
+/* 후처리 블룸 */
 async function loadBloom() {
   if (!sceneApi || !THREE) return;
   try {
@@ -688,40 +1004,49 @@ async function loadBloom() {
       import('three/addons/postprocessing/OutputPass.js'),
     ]);
     const w = window.innerWidth, h = window.innerHeight;
-    const composer = new EffectComposer(sceneApi.renderer);
-    composer.addPass(new RenderPass(sceneApi.scene, sceneApi.camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.36, 0.5, 0.66);
-    composer.addPass(bloom);
-    composer.addPass(new OutputPass());
-    composer.setSize(w, h);
-    sceneApi.attachBloom(composer);
+    const c = new EffectComposer(sceneApi.renderer);
+    c.addPass(new RenderPass(sceneApi.scene, sceneApi.camera));
+    c.addPass(new UnrealBloomPass(new THREE.Vector2(w, h), 0.24, 0.55, 0.62));
+    c.addPass(new OutputPass());
+    c.setSize(w, h);
+    sceneApi.attachComposer(c);
   } catch (e) {
     console.warn('[holo] 블룸 생략:', e);
   }
 }
 
-/* ---------------- 재질 페이드 준비 ---------------- */
-function fadeMaterials(root) {
-  root.traverse((o) => {
-    if (!o.material) return;
-    const mats = Array.isArray(o.material) ? o.material : [o.material];
-    mats.forEach((m) => {
-      if (m.userData.base == null) {
-        m.userData.base = m.opacity == null ? 1 : m.opacity;
-        m.transparent = true;
-      }
-    });
-  });
+/* =============================================================
+   텍스처 · 패널 헬퍼
+   ============================================================= */
+function randomDir(T) {
+  const z = Math.random() * 2 - 1;
+  const a = Math.random() * Math.PI * 2;
+  const r = Math.sqrt(Math.max(0, 1 - z * z));
+  return new T.Vector3(Math.cos(a) * r, z, Math.sin(a) * r);
 }
 
-/* ---------------- 텍스처 헬퍼 ---------------- */
+function dotTexture(T) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(190,255,238,0.55)');
+  g.addColorStop(1, 'rgba(124,245,200,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  const tex = new T.CanvasTexture(c);
+  tex.colorSpace = T.SRGBColorSpace;
+  return tex;
+}
+
 function radialTexture(T, inner, outer) {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
   g.addColorStop(0, inner);
-  g.addColorStop(0.45, inner.replace(/[\d.]+\)$/, '0.35)'));
+  g.addColorStop(0.45, inner.replace(/[\d.]+\)$/, '0.32)'));
   g.addColorStop(1, outer);
   x.fillStyle = g;
   x.fillRect(0, 0, 128, 128);
@@ -730,429 +1055,379 @@ function radialTexture(T, inner, outer) {
   return tex;
 }
 
-function glowSprite(T, color, size, opacity) {
-  const tex = radialTexture(T, hexA(color, 0.9), hexA(color, 0));
-  const sp = new T.Sprite(new T.SpriteMaterial({
-    map: tex, color: new T.Color(color), transparent: true, opacity,
-    blending: T.AdditiveBlending, depthWrite: false,
-  }));
-  sp.scale.set(size, size, 1);
-  return sp;
-}
-
 function hexA(hex, a) {
   let h = String(hex || '#7cf5c8').replace('#', '');
   if (h.length === 3) h = h.split('').map((c) => c + c).join('');
   const n = parseInt(h, 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
 }
 
-/* ---------------- 단계별 3D 오브젝트 ---------------- */
-function buildStage(T, stage, isPhone, portrait) {
-  const accent = stage.accent || '#7cf5c8';
-  const g = new T.Group();
-  g.userData.baseY = 1.9;
-  g.position.set(0, 1.9, 0);
-
-  const kind = stage.visual || stage.id || 'generic';
-  if (kind === 'weather' || kind === 'sun') buildWeather(g, T, accent, stage, portrait);
-  else if (kind === 'us' || kind === 'market') buildBars(g, T, accent, stage, portrait);
-  else if (kind === 'kr') buildPanels(g, T, accent, stage, 'kr', portrait);
-  else if (kind === 'calendar') buildPanels(g, T, accent, stage, 'cal', portrait);
-  else buildPanels(g, T, accent, stage, 'cal', portrait);
-
-  return g;
+function chamferPath(ctx, x, y, w, h, c) {
+  ctx.beginPath();
+  ctx.moveTo(x + c, y);
+  ctx.lineTo(x + w - c, y);
+  ctx.lineTo(x + w, y + c);
+  ctx.lineTo(x + w, y + h - c);
+  ctx.lineTo(x + w - c, y + h);
+  ctx.lineTo(x + c, y + h);
+  ctx.lineTo(x, y + h - c);
+  ctx.lineTo(x, y + c);
+  ctx.closePath();
 }
 
-/* 01 날씨 — 회전하는 태양/빛 링 */
-function buildWeather(g, T, accent, stage, portrait) {
-  if (portrait) g.scale.setScalar(0.92);
-  const shell = new T.Mesh(
-    new T.IcosahedronGeometry(0.98, 1),
-    new T.MeshBasicMaterial({ color: accent, wireframe: true, transparent: true, opacity: 0.5, blending: T.AdditiveBlending, depthWrite: false })
-  );
-  g.add(shell);
-
-  const coreTex = radialTexture(T, 'rgba(255,232,180,0.95)', 'rgba(255,196,120,0)');
-  const core = new T.Sprite(new T.SpriteMaterial({
-    map: coreTex, color: 0xffe6b8, transparent: true, opacity: 0.5, blending: T.AdditiveBlending, depthWrite: false,
-  }));
-  core.scale.set(2.0, 2.0, 1);
-  g.add(core);
-
-  const glow = glowSprite(T, accent, 3.4, 0.14);
-  g.add(glow);
-
-  const rings = [];
-  [[1.34, 0.011, 0.85], [1.62, 0.009, 0.55], [1.98, 0.007, 0.32]].forEach(([r, tube, op], i) => {
-    const ring = new T.Mesh(
-      new T.TorusGeometry(r, tube, 6, 128),
-      new T.MeshBasicMaterial({ color: accent, transparent: true, opacity: op, blending: T.AdditiveBlending, depthWrite: false })
-    );
-    ring.rotation.x = Math.PI / 2 - 0.5 + i * 0.42;
-    ring.rotation.y = i * 0.8;
-    g.add(ring);
-    rings.push(ring);
-  });
-
-  const rays = new T.Group();
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2;
-    const len = 0.36 + (i % 3) * 0.12;
-    const ray = new T.Mesh(
-      new T.BoxGeometry(0.014, len, 0.014),
-      new T.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.3, blending: T.AdditiveBlending, depthWrite: false })
-    );
-    ray.position.set(Math.cos(a) * (1.16 + len / 2), Math.sin(a) * (1.16 + len / 2), 0);
-    ray.rotation.z = a - Math.PI / 2;
-    rays.add(ray);
-  }
-  g.add(rays);
-
-  g.userData.tick = (t, dt, vis) => {
-    shell.rotation.y = t * 0.18;
-    shell.rotation.x = Math.sin(t * 0.2) * 0.12;
-    rays.rotation.z = -t * 0.22;
-    rings.forEach((r, i) => {
-      r.rotation.z = t * (0.1 + i * 0.05) * (i % 2 ? -1 : 1);
-      r.rotation.x = Math.PI / 2 - 0.5 + i * 0.42 + Math.sin(t * 0.3 + i) * 0.12;
+function fadeMaterials(root) {
+  root.traverse((o) => {
+    if (!o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach((m) => {
+      if (m.userData && m.userData.base == null) {
+        m.userData.base = m.opacity == null ? 1 : m.opacity;
+        m.transparent = true;
+      }
     });
-    const pulse = 1 + Math.sin(t * 1.25) * 0.05;
-    core.scale.set(2.0 * pulse, 2.0 * pulse, 1);
-    glow.scale.setScalar(3.4 * (1 + Math.sin(t * 0.8) * 0.04));
-  };
+  });
 }
 
-/* 02 미증시 — 하락 막대 · 파동 */
-function buildBars(g, T, accent, stage, portrait) {
-  const bars = (stage.metrics || []).filter((m) => typeof m.pct === 'number').slice(0, 5);
-  const maxAbs = Math.max(1, ...bars.map((b) => Math.abs(b.pct)));
-  const baseY = -1.9;
+/* ---- 패널 캔버스 ---- */
+const FONT_SANS = '"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif';
+const FONT_MONO = '"SF Mono","Roboto Mono","Noto Sans Mono CJK KR",ui-monospace,Menlo,monospace';
 
-  bars.forEach((b, i) => {
-    const x = (i - (bars.length - 1) / 2) * 0.92;
-    const h = 0.45 + (Math.abs(b.pct) / maxAbs) * 2.5;
-    const boxGeo = new T.BoxGeometry(0.42, 1, 0.42);
-    const fill = new T.Mesh(boxGeo, new T.MeshBasicMaterial({
-      color: accent, transparent: true, opacity: 0.1, depthWrite: false,
-    }));
-    fill.scale.y = h;
-    fill.position.set(x, baseY + h / 2, 0);
-    const edges = new T.LineSegments(
-      new T.EdgesGeometry(boxGeo),
-      new T.LineBasicMaterial({ color: accent, transparent: true, opacity: 0.9 })
-    );
-    edges.scale.y = h;
-    edges.position.copy(fill.position);
-    const cap = new T.Mesh(
-      new T.PlaneGeometry(0.46, 0.46),
-      new T.MeshBasicMaterial({ map: radialTexture(T, hexA(accent, 0.95), hexA(accent, 0)), color: new T.Color(accent), transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false })
-    );
-    cap.rotation.x = -Math.PI / 2;
-    cap.position.set(x, baseY + h + 0.01, 0);
-    g.add(fill, edges, cap);
-
-    b._ui = { h, x, fill, edges, cap, baseY };
-  });
-
-  // 떨어지는 궤적
-  const pts = [];
-  const N = 9;
-  for (let i = 0; i < N; i++) {
-    const x = -2.35 + (i / (N - 1)) * 4.7;
-    const y = 1.35 - Math.pow(i / (N - 1), 0.72) * 2.0 + Math.sin(i * 1.1) * 0.16;
-    pts.push(new T.Vector3(x, y, 0.55));
+function fitFont(ctx, text, maxW, start, min, weight, family) {
+  let s = start;
+  for (; s > min; s -= 2) {
+    ctx.font = weight + ' ' + s + 'px ' + family;
+    if (ctx.measureText(text).width <= maxW) break;
   }
-  const curve = new T.CatmullRomCurve3(pts);
-  const lineGeo = new T.BufferGeometry().setFromPoints(curve.getPoints(120));
-  const trend = new T.Line(lineGeo, new T.LineBasicMaterial({ color: 0xff7a8c, transparent: true, opacity: 0.95 }));
-  g.add(trend);
-
-  const dots = pts.map((p) => {
-    const d = new T.Mesh(
-      new T.SphereGeometry(0.035, 8, 8),
-      new T.MeshBasicMaterial({ color: 0xffd0d6, transparent: true, opacity: 0.95 })
-    );
-    d.position.copy(p);
-    g.add(d);
-    return d;
-  });
-
-  // S&P · VIX 패널
-  const p1 = hologramPanel(T, 2.55, 0.78, {
-    label: 'S&P 500 · 11/20',
-    value: '6,910.39',
-    sub: '−3.70%',
-    accent,
-  });
-  p1.position.set(portrait ? 0 : -0.15, 0.98, -0.75);
-  g.add(p1);
-
-  const p2 = hologramPanel(T, 1.55, 0.62, {
-    label: 'VIX · 공포탐욕',
-    value: '35.89',
-    sub: '공포 9.7',
-    accent: '#ffbf5a',
-    small: true,
-  });
-  p2.position.set(portrait ? 0.9 : 1.42, portrait ? -0.55 : -0.12, -0.35);
-  g.add(p2);
-
-  g.userData.tick = (t, dt, vis) => {
-    const grow = easeOut(clamp((vis - 0.15) / 0.85, 0, 1));
-    bars.forEach((b, i) => {
-      const u = b._ui;
-      const h = u.h * grow;
-      u.fill.scale.y = Math.max(0.001, h);
-      u.fill.position.y = u.baseY + h / 2;
-      u.edges.scale.y = Math.max(0.001, h);
-      u.edges.position.y = u.baseY + h / 2;
-      u.cap.position.y = u.baseY + h + 0.01;
-      u.cap.material.opacity = 0.5 * vis;
-      u.fill.material.opacity = 0.1 * vis;
-      u.edges.material.opacity = 0.9 * vis;
-    });
-    trend.material.opacity = 0.95 * clamp((vis - 0.35) / 0.65, 0, 1);
-    trend.geometry.setDrawRange(0, Math.floor(120 * clamp((vis - 0.3) / 0.7, 0, 1)));
-    dots.forEach((d, i) => {
-      d.material.opacity = 0.9 * clamp((vis - 0.5) / 0.5, 0, 1);
-      d.scale.setScalar(1 + Math.sin(t * 2.2 + i) * 0.18);
-    });
-    p1.position.y = 0.98 + Math.sin(t * 0.8) * 0.045;
-    p2.position.y = -0.12 + Math.sin(t * 0.95 + 1) * 0.05;
-  };
+  ctx.font = weight + ' ' + s + 'px ' + family;
+  return s;
 }
 
-/* 03 국장 · 04 일정 — 유리판(홀로그램 패널) 스택 */
-function buildPanels(g, T, accent, stage, kind, portrait) {
-  const items = (stage.metrics || []).slice(0, 3);
-  const wide = [
-    { x: -0.95, y: 0.82, z: 0.22, ry: 0.2, w: 1.78, h: 0.88 },
-    { x: 0.95, y: 0.82, z: -0.2, ry: -0.2, w: 1.78, h: 0.88 },
-    { x: 0, y: -0.42, z: 0.42, ry: 0.0, w: 2.56, h: 0.8 },
-  ];
-  const tall = [
-    { x: 0, y: 1.12, z: 0.1, ry: 0.06, w: 2.16, h: 0.76 },
-    { x: 0, y: 0.14, z: 0.22, ry: -0.05, w: 2.16, h: 0.76 },
-    { x: 0, y: -0.84, z: 0.34, ry: 0.03, w: 2.16, h: 0.72 },
-  ];
-  const layouts = portrait ? tall : wide;
-
-  const panels = [];
-  items.forEach((m, i) => {
-    const L = layouts[i] || layouts[layouts.length - 1];
-    const pct = typeof m.pct === 'number' ? m.pct : null;
-    const p = hologramPanel(T, L.w, L.h, {
-      label: (stage.no ? stage.no + ' · ' : '') + m.label,
-      value: m.value,
-      sub: pct != null ? (pct > 0 ? '+' : '') + pct.toFixed(2) + '%' : '',
-      accent,
-      down: pct != null && pct < 0,
-      fill: pct != null ? Math.min(0.95, Math.abs(pct) / 6) : 0.3,
-    });
-    p.position.set(L.x || 0, L.y, L.z);
-    p.rotation.y = L.ry;
-    p.rotation.x = -0.04 + i * 0.012;
-    g.add(p);
-    panels.push({ mesh: p, L, i });
-  });
-
-  // 패널을 감싸는 궤도 링
-  const orbit = new T.Group();
-  const ring = new T.Mesh(
-    new T.TorusGeometry(portrait ? 1.75 : 2.45, 0.006, 6, 160),
-    new T.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.35, blending: T.AdditiveBlending, depthWrite: false })
-  );
-  ring.rotation.x = Math.PI / 2 + 0.12;
-  orbit.add(ring);
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * Math.PI * 2;
-    const tick = new T.Mesh(
-      new T.BoxGeometry(0.006, 0.05 + (i % 4) * 0.02, 0.006),
-      new T.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.4, blending: T.AdditiveBlending, depthWrite: false })
-    );
-    tick.position.set(Math.cos(a) * (portrait ? 1.75 : 2.45), 0, Math.sin(a) * (portrait ? 1.75 : 2.45));
-    orbit.add(tick);
-  }
-  orbit.position.y = portrait ? -0.95 : -0.62;
-  g.add(orbit);
-
-  const halo = glowSprite(T, accent, 5.2, 0.16);
-  halo.position.set(0, 0.2, -0.6);
-  g.add(halo);
-
-  g.userData.tick = (t, dt, vis) => {
-    panels.forEach(({ mesh, L, i }) => {
-      mesh.position.y = L.y + Math.sin(t * 0.75 + i * 1.4) * 0.05;
-      mesh.rotation.y = L.ry + Math.sin(t * 0.4 + i) * 0.04;
-    });
-    orbit.rotation.y = t * (kind === 'kr' ? 0.16 : -0.12);
-    orbit.rotation.z = Math.sin(t * 0.25) * 0.04;
-  };
-}
-
-/* 유리판(홀로그램 패널) 한 장 — 캔버스 텍스처 */
-function hologramPanel(T, w, h, opt) {
-  const accent = opt.accent || '#7cf5c8';
-  const pxW = 1024;
-  const pxH = Math.round(pxW * (h / w));
-  const canvas = document.createElement('canvas');
-  canvas.width = pxW;
-  canvas.height = pxH;
-  const x = canvas.getContext('2d');
-  const pad = 36;
-  const fontSans = '"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif';
-  const fontMono = '"SF Mono","Roboto Mono","Noto Sans Mono CJK KR",ui-monospace,monospace';
-  const label = String(opt.label || '').toUpperCase();
-  const value = String(opt.value || '');
-  const sub = String(opt.sub || '');
-
-  // 유리 배경
-  const bg = x.createLinearGradient(0, 0, pxW * 0.7, pxH);
-  bg.addColorStop(0, 'rgba(11,34,34,0.94)');
-  bg.addColorStop(0.55, 'rgba(5,16,20,0.9)');
-  bg.addColorStop(1, 'rgba(8,26,29,0.93)');
-  x.fillStyle = bg;
-  x.beginPath();
-  roundRect(x, 0, 0, pxW, pxH, 20);
-  x.fill();
-
-  // 안쪽 광
-  const g2 = x.createRadialGradient(pxW * 0.2, pxH * 0.08, 0, pxW * 0.2, pxH * 0.08, pxW * 0.95);
-  g2.addColorStop(0, hexA(accent, 0.15));
-  g2.addColorStop(1, hexA(accent, 0));
-  x.fillStyle = g2;
-  x.fillRect(0, 0, pxW, pxH);
-
-  // 스캔라인
-  x.globalAlpha = 0.07;
-  x.strokeStyle = 'rgba(255,255,255,0.7)';
-  x.lineWidth = 1;
-  for (let yy = 0; yy < pxH; yy += 6) {
-    x.beginPath(); x.moveTo(0, yy); x.lineTo(pxW, yy); x.stroke();
-  }
-  x.globalAlpha = 1;
-
-  // 테두리
-  x.strokeStyle = hexA(accent, 0.68);
-  x.lineWidth = 3;
-  x.beginPath();
-  roundRect(x, 1.5, 1.5, pxW - 3, pxH - 3, 20);
-  x.stroke();
-
-  // 상단 액센트 라인
-  const grad = x.createLinearGradient(0, 0, pxW, 0);
-  grad.addColorStop(0, hexA(accent, 0));
-  grad.addColorStop(0.5, hexA(accent, 0.95));
-  grad.addColorStop(1, hexA(accent, 0));
-  x.fillStyle = grad;
-  x.fillRect(0, 0, pxW, 4);
-
-  // 코너 틱
-  x.strokeStyle = hexA(accent, 0.95);
-  x.lineWidth = 4;
-  const k = 30;
-  [[12, 12, 1, 1], [pxW - 12, 12, -1, 1], [12, pxH - 12, 1, -1], [pxW - 12, pxH - 12, -1, -1]].forEach(([cx, cy, dx, dy]) => {
-    x.beginPath();
-    x.moveTo(cx + dx * k, cy);
-    x.lineTo(cx, cy);
-    x.lineTo(cx, cy + dy * k);
-    x.stroke();
-  });
-
-  // 라벨 + 값 + 보조 텍스트 — 패널 안에서 세로 가운데 정렬
-  x.textBaseline = 'alphabetic';
-  const labelSize = 32;
-  const maxW = pxW - pad * 2 - 44;
-
-  let size = Math.round(pxH * (opt.small ? 0.3 : 0.33));
-  let vw = 0;
-  for (; size > 22; size -= 3) {
-    x.font = '600 ' + size + 'px ' + fontMono;
-    vw = x.measureText(value).width;
-    if (vw <= maxW) break;
-  }
-  let ss = 0, sw = 0;
-  if (sub) {
-    ss = Math.round(size * 0.4);
-    for (; ss > 13; ss -= 2) {
-      x.font = '500 ' + ss + 'px ' + fontSans;
-      sw = x.measureText(sub).width;
-      if (sw <= maxW) break;
-    }
-  }
-  const gap1 = 16, gap2 = sub ? 16 : 0;
-  const blockH = labelSize + gap1 + size * 0.78 + (sub ? gap2 + ss : 0);
-  const top = Math.max(pad * 0.55, (pxH - blockH) / 2);
-  const labelY = top + labelSize;
-  const valueY = labelY + gap1 + size * 0.78;
-  const subY = valueY + gap2 + ss;
-
-  x.fillStyle = hexA(accent, 0.92);
-  x.font = '600 ' + labelSize + 'px ' + fontSans;
-  x.fillText(label, pad, labelY);
-
-  x.font = '600 ' + size + 'px ' + fontMono;
-  x.fillStyle = '#f4fffd';
-  x.shadowColor = hexA(opt.down ? '#ff7a8c' : accent, 0.35);
-  x.shadowBlur = 7;
-  x.fillText(value, pad, valueY);
-  x.shadowBlur = 0;
-
-  if (sub) {
-    x.font = '500 ' + ss + 'px ' + fontSans;
-    x.fillStyle = hexA(accent, 0.95);
-    x.fillText(sub, pad, subY);
-    x.strokeStyle = hexA(accent, 0.32);
-    x.lineWidth = 2;
-    x.beginPath();
-    x.moveTo(pad, subY + 9);
-    x.lineTo(pad + sw, subY + 9);
-    x.stroke();
-  }
-
-  // 아래쪽 진행 바(장식)
-  x.fillStyle = hexA(accent, 0.18);
-  x.fillRect(pad, pxH - pad * 0.62, maxW, 3);
-  x.fillStyle = hexA(accent, 0.8);
-  x.fillRect(pad, pxH - pad * 0.62, maxW * (opt.fill != null ? opt.fill : 0.42), 3);
-
+function makeTexture(T, canvas, modelW, modelH) {
   const tex = new T.CanvasTexture(canvas);
   tex.colorSpace = T.SRGBColorSpace;
   tex.anisotropy = 4;
-
-  const group = new T.Group();
-  const face = new T.Mesh(
-    new T.PlaneGeometry(w, h),
-    new T.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.97, depthWrite: false, side: T.DoubleSide })
+  tex.minFilter = T.LinearFilter;
+  tex.magFilter = T.LinearFilter;
+  tex.needsUpdate = true;
+  const mesh = new T.Mesh(
+    new T.PlaneGeometry(modelW, modelH),
+    new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 1 })
   );
-  group.add(face);
-
-  const back = new T.Mesh(
-    new T.PlaneGeometry(w * 0.99, h * 0.99),
-    new T.MeshBasicMaterial({ color: new T.Color(accent), transparent: true, opacity: 0.05, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide })
-  );
-  back.position.z = -0.02;
-  group.add(back);
-
-  const edge = new T.LineSegments(
-    new T.EdgesGeometry(new T.PlaneGeometry(w, h)),
-    new T.LineBasicMaterial({ color: new T.Color(accent), transparent: true, opacity: 0.5 })
-  );
-  edge.position.z = 0.001;
-  group.add(edge);
-
-  return group;
+  mesh.renderOrder = 20;
+  return mesh;
 }
 
-function roundRect(ctx, x, y, w, h, r) {
-  r = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+/* 깎인 HUD 프레임 패널 */
+function hudPanel(T, opt) {
+  const W = 1400, H = 430;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  const accent = opt.accent || '#7cf5c8';
+  const cut = 34;
+
+  // 유리 바탕 (아주 옅게 — 홀로그램 판)
+  chamferPath(x, 2, 2, W - 4, H - 4, cut);
+  const bg = x.createLinearGradient(0, 0, W * 0.85, H);
+  bg.addColorStop(0, 'rgba(5,26,22,0.8)');
+  bg.addColorStop(0.5, 'rgba(2,12,10,0.72)');
+  bg.addColorStop(1, 'rgba(4,18,16,0.78)');
+  x.fillStyle = bg;
+  x.fill();
+
+  // 내부 광
+  const rg = x.createRadialGradient(W * 0.22, H * 0.1, 0, W * 0.22, H * 0.1, W * 0.9);
+  rg.addColorStop(0, hexA(accent, 0.10));
+  rg.addColorStop(1, hexA(accent, 0));
+  x.fillStyle = rg;
+  x.fillRect(0, 0, W, H);
+
+  // 스캔라인
+  x.save();
+  chamferPath(x, 2, 2, W - 4, H - 4, cut);
+  x.clip();
+  x.globalAlpha = 0.05;
+  x.strokeStyle = hexA(accent, 0.9);
+  x.lineWidth = 1;
+  for (let yy = 0; yy < H; yy += 5) { x.beginPath(); x.moveTo(0, yy); x.lineTo(W, yy); x.stroke(); }
+  x.restore();
+
+  // 테두리
+  chamferPath(x, 2.5, 2.5, W - 5, H - 5, cut);
+  x.strokeStyle = hexA(accent, 0.62);
+  x.lineWidth = 3;
+  x.stroke();
+
+  // 코너 브래킷
+  x.strokeStyle = hexA(accent, 0.98);
+  x.lineWidth = 5;
+  const B = 54;
+  [[8, 8, 1, 1], [W - 8, 8, -1, 1], [8, H - 8, 1, -1], [W - 8, H - 8, -1, -1]].forEach(([cx, cy, dx, dy]) => {
+    x.beginPath();
+    x.moveTo(cx + dx * B, cy);
+    x.lineTo(cx, cy);
+    x.lineTo(cx, cy + dy * B);
+    x.stroke();
+  });
+
+  // 상단 액센트 라인
+  const lg = x.createLinearGradient(W * 0.1, 0, W * 0.9, 0);
+  lg.addColorStop(0, hexA(accent, 0));
+  lg.addColorStop(0.5, hexA(accent, 0.9));
+  lg.addColorStop(1, hexA(accent, 0));
+  x.fillStyle = lg;
+  x.fillRect(W * 0.1, 2, W * 0.8, 3);
+
+  const padL = 62;
+  // 라벨
+  x.textBaseline = 'alphabetic';
+  x.fillStyle = hexA(accent, 0.95);
+  x.fillRect(padL, 46, 5, 22);
+  fitFont(x, opt.label || '', W - padL * 2 - 260, 32, 20, '600', FONT_SANS);
+  x.fillStyle = hexA(accent, 0.9);
+  x.fillText(opt.label || '', padL + 18, 72);
+
+  // 우측 태그
+  if (opt.tag) {
+    x.textAlign = 'right';
+    fitFont(x, opt.tag, 400, 24, 15, '500', FONT_SANS);
+    x.fillStyle = 'rgba(196,236,226,0.62)';
+    x.fillText(opt.tag, W - 70, 72);
+    x.textAlign = 'left';
+  }
+
+  // 큰 값
+  const value = String(opt.value || '');
+  const vs = fitFont(x, value, W - padL * 2 - 30, 156, 70, '600', FONT_MONO);
+  x.fillStyle = '#f6fffc';
+  x.shadowColor = hexA(accent, 0.5);
+  x.shadowBlur = 24;
+  x.fillText(value, padL, 108 + vs);
+  x.shadowBlur = 0;
+
+  // 보조 라인
+  if (opt.sub) {
+    const parts = String(opt.sub).split('·').map((s) => s.trim()).filter(Boolean);
+    let cx = padL;
+    const baseline = H - 74;
+    const maxW = W - padL * 2 - 10;
+    let fs = 40;
+    x.font = '500 ' + fs + 'px ' + FONT_SANS;
+    while (x.measureText(String(opt.sub)).width > maxW && fs > 20) {
+      fs -= 2; x.font = '500 ' + fs + 'px ' + FONT_SANS;
+    }
+    parts.forEach((p, i) => {
+      const isPct = /^[−+\-]?\d+(\.\d+)?%$/.test(p);
+      x.fillStyle = isPct ? hexA('#ff7a8c', 0.95) : 'rgba(214,242,235,0.84)';
+      x.fillText(p, cx, baseline);
+      cx += x.measureText(p).width;
+      if (i < parts.length - 1) {
+        x.fillStyle = 'rgba(178,216,208,0.8)';
+        x.fillText('   ·   ', cx, baseline);
+        cx += x.measureText('   ·   ').width;
+      }
+    });
+  }
+
+
+  return makeTexture(T, cv, 3.16, 0.97);
+}
+
+/* 얇은 홀로그램 칩 */
+function hudChip(T, opt) {
+  const W = 900, H = 250;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+  const accent = opt.accent || '#7cf5c8';
+  const cut = 22;
+
+  chamferPath(x, 2, 2, W - 4, H - 4, cut);
+  const bg = x.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, 'rgba(5,24,20,0.7)');
+  bg.addColorStop(1, 'rgba(3,12,11,0.58)');
+  x.fillStyle = bg;
+  x.fill();
+
+  chamferPath(x, 2.5, 2.5, W - 5, H - 5, cut);
+  x.strokeStyle = hexA(accent, 0.55);
+  x.lineWidth = 2.4;
+  x.stroke();
+
+  x.strokeStyle = hexA(accent, 0.95);
+  x.lineWidth = 4;
+  [[6, 6, 1, 1], [W - 6, 6, -1, 1], [6, H - 6, 1, -1], [W - 6, H - 6, -1, -1]].forEach(([cx, cy, dx, dy]) => {
+    const K = 28;
+    x.beginPath(); x.moveTo(cx + dx * K, cy); x.lineTo(cx, cy); x.lineTo(cx, cy + dy * K); x.stroke();
+  });
+
+  // 스캔라인
+  x.save();
+  chamferPath(x, 2, 2, W - 4, H - 4, cut);
+  x.clip();
+  x.globalAlpha = 0.05;
+  x.strokeStyle = hexA(accent, 0.9);
+  x.lineWidth = 1;
+  for (let yy = 0; yy < H; yy += 5) { x.beginPath(); x.moveTo(0, yy); x.lineTo(W, yy); x.stroke(); }
+  x.restore();
+
+  x.textBaseline = 'alphabetic';
+  x.fillStyle = hexA(accent, 0.95);
+  x.fillRect(44, 40, 4, 20);
+  x.font = '600 30px ' + FONT_SANS;
+  x.fillText(opt.label || '', 58, 58);
+
+  const val = String(opt.value || '');
+  fitFont(x, val, W - 108, 66, 26, '600', FONT_MONO);
+  x.fillStyle = '#f2fffb';
+  x.shadowColor = hexA(accent, 0.5);
+  x.shadowBlur = 16;
+  x.fillText(val, 44, 168);
+  x.shadowBlur = 0;
+
+  x.fillStyle = hexA(accent, 0.55);
+  x.fillRect(W * 0.6, 44, W * 0.3, 2);
+
+  return makeTexture(T, cv, 1.62, 0.45);
+}
+
+/* ---- 한 단계 = 깊은 Z에서 날아오는 레이어 묶음 ---- */
+function buildStage(T, s, opt) {
+  const g = new T.Group();
+  const accent = s.accent || '#7cf5c8';
+  const layers = [];
+  const m = s.metrics || [];
+
+  const add = (obj, cfg = {}) => {
+    const c = new T.Group();
+    c.position.set(cfg.x || 0, cfg.y || 0, cfg.z || 0);
+    c.rotation.set(cfg.rx || 0, cfg.ry || 0, cfg.rz || 0);
+    c.userData.baseY = cfg.y || 0;
+    c.userData.baseZ = cfg.z || 0;
+    c.userData.baseRX = cfg.rx || 0;
+    c.userData.delay = cfg.delay || 0;
+    c.add(obj);
+    fadeMaterials(obj);
+    g.add(c);
+    layers.push(c);
+    return c;
+  };
+
+  const visual = s.visual || s.id || 'generic';
+  const pct = (v) => (typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) + '%' : '');
+
+  let value = s.headline || '';
+  let label = m[0] && m[0].label ? m[0].label : (s.title || '');
+  const tag = s.title || '';
+  if (m[0] && m[0].value && String(m[0].value).length <= 12) value = m[0].value;
+
+  const panel = hudPanel(T, {
+    accent,
+    label,
+    value,
+    sub: s.sub || '',
+    tag,
+  });
+
+  const panelC = add(panel, { y: -0.44, z: 1.2, rx: -0.02, delay: 0 });
+  g.userData.panel = panelC;
+
+  /* 단계별 3D 오브젝트 */
+  if (visual === 'weather') {
+    // 앰버 기온 게이지 (분할 호 + 방사 눈금)
+    const arcG = new T.Group();
+    const amber = 0xffc76b;
+    const arcMat = new T.MeshBasicMaterial({
+      color: amber, transparent: true, opacity: 0.55,
+      blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide,
+    });
+    [[0.30, 1.15], [2.15, 1.05], [4.05, 0.95]].forEach(([from, len]) => {
+      arcG.add(new T.Mesh(new T.RingGeometry(1.32, 1.326, 96, 1, from, len), arcMat));
+    });
+    const tickMat = new T.MeshBasicMaterial({
+      color: amber, transparent: true, opacity: 0.5,
+      blending: T.AdditiveBlending, depthWrite: false,
+    });
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * Math.PI * 2;
+      const big = i % 6 === 0;
+      const tk = new T.Mesh(new T.BoxGeometry(0.004, big ? 0.075 : 0.038, 0.004), tickMat);
+      tk.position.set(Math.cos(a) * 1.355, Math.sin(a) * 1.355, 0);
+      tk.rotation.z = a - Math.PI / 2;
+      arcG.add(tk);
+    }
+    arcG.rotation.set(1.30, 0.18, 0.1);
+    add(arcG, { y: 0, z: 0, delay: 0.05 });
+    g.userData.arcG = arcG;
+  }
+
+  if (visual === 'us' || s.id === 'us') {
+    // 네온 하락 막대 (지수별 낙폭)
+    const bars = m.filter((d) => typeof d.pct === 'number').slice(0, 4);
+    const maxAbs = Math.max(1, ...bars.map((b) => Math.abs(b.pct)));
+    const bg2 = new T.Group();
+    const baseY = -0.02;
+    bars.forEach((b, i) => {
+      const x = (i - (bars.length - 1) / 2) * 0.30;
+      const h = 0.08 + (Math.abs(b.pct) / maxAbs) * 0.40;
+      const mat = new T.MeshBasicMaterial({
+        color: 0xff6b81, transparent: true, opacity: 0.34, blending: T.AdditiveBlending, depthWrite: false,
+      });
+      const bar = new T.Mesh(new T.BoxGeometry(0.075, 1, 0.075), mat);
+      bar.scale.y = h;
+      bar.position.set(x, baseY + h / 2, 0);
+      const edge = new T.LineSegments(
+        new T.EdgesGeometry(new T.BoxGeometry(0.075, 1, 0.075)),
+        new T.LineBasicMaterial({ color: 0xff8f9d, transparent: true, opacity: 0.9, blending: T.AdditiveBlending, depthWrite: false })
+      );
+      edge.scale.y = h;
+      edge.position.copy(bar.position);
+      bg2.add(bar, edge);
+    });
+    const baseline = new T.Mesh(
+      new T.BoxGeometry(1.36, 0.004, 0.004),
+      new T.MeshBasicMaterial({ color: 0xff6b81, transparent: true, opacity: 0.7, blending: T.AdditiveBlending, depthWrite: false })
+    );
+    baseline.position.set(0, baseY, 0);
+    bg2.add(baseline);
+    bg2.position.set(0, 0.10, 0.18);
+    add(bg2, { y: 0.10, z: 0.18, delay: 0.16 });
+    g.userData.bars = bg2;
+  }
+
+  if (visual === 'kr') {
+    if (m[2] && m[2].value) {
+      const chip = hudChip(T, { accent, label: m[2].label, value: m[2].value });
+      add(chip, { x: 0.46, y: 0.80, z: 1.14, ry: 0.05, delay: 0.18 });
+    }
+  }
+
+  if (visual === 'calendar') {
+    if (m[1] && m[1].value) {
+      const chip1 = hudChip(T, { accent, label: m[1].label, value: m[1].value });
+      add(chip1, { x: -0.40, y: 0.86, z: 1.12, ry: 0.06, delay: 0.16 });
+    }
+    if (m[2] && m[2].value) {
+      const chip2 = hudChip(T, { accent, label: m[2].label, value: m[2].value });
+      add(chip2, { x: 0.34, y: 0.40, z: 1.08, ry: -0.05, delay: 0.3 });
+    }
+  }
+
+  g.userData.layers = layers;
+  g.userData.v = 0;
+  g.tick = (now, dt, vis) => {
+    if (g.userData.bars) {
+      const e = easeOut(clamp(vis, 0, 1));
+      g.userData.bars.scale.set(1, Math.max(0.001, e), 1);
+      g.userData.bars.position.y = 0.52 + Math.sin(now * 0.7) * 0.01;
+    }
+    if (g.userData.arcG) {
+      g.userData.arcG.rotation.z = now * 0.12;
+    }
+    layers.forEach((c, i) => {
+      c.position.y = c.userData.baseY + Math.sin(now * 0.6 + i * 1.3) * 0.014;
+    });
+  };
+
+  return g;
 }
