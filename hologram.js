@@ -1427,7 +1427,7 @@ function initScene(T) {
     conv.act += (act - conv.act) * (1 - Math.exp(-dt * kA));
     conv.burst = Math.max(0, conv.burst - dt * 0.42);
 
-    const target = Math.min(1, conv.act * 0.88 + conv.burst * 0.5);
+    const target = Math.min(1, conv.act * 0.70 + Math.max(0, lvl - 0.12) * 0.30 + conv.burst * 0.5);
 
     /* 임계 감쇠 스프링 → 튀지 않고 물 흐르듯 */
     conv.vel += ((target - conv.v) * 6.0 - conv.vel * 6.4) * dt;
