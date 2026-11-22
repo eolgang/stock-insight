@@ -1109,31 +1109,51 @@ function initScene(T) {
       [-w + c, h], [w - c, h], [w, h - c], [w, -h + c],
       [w - c, -h], [-w + c, -h], [-w, -h + c], [-w, h - c], [-w + c, h],
     ];
-    const pos = [], prog = [];
-    let total = 0;
-    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    const pos = [], prog = [], side = [], idx = [];
+    const W = 0.0075;   // 테두리 두께(월드 단위)
 
-    /* 변: 0.12 ~ 1.0 구간을 따라 채워진다 */
+    /* 한 선분을 폭 있는 리본으로: 끝은 부드럽게 꺼진다 */
+    function ribbon(x0, y0, x1, y1, p0, p1, wid) {
+      const dx = x1 - x0, dy = y1 - y0;
+      const L = Math.hypot(dx, dy) || 1;
+      const nx = (-dy / L) * wid * 0.5, ny = (dx / L) * wid * 0.5;
+      const base = pos.length / 3;
+      pos.push(
+        x0 - nx, y0 - ny, 0, x0 + nx, y0 + ny, 0,
+        x1 + nx, y1 + ny, 0, x1 - nx, y1 - ny, 0
+      );
+      prog.push(p0, p0, p1, p1);
+      side.push(0, 1, 1, 0);
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+
+    let total = 0;
+    const lens = [];
+    for (let i = 1; i < pts.length; i++) {
+      const L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      lens.push(L); total += L;
+    }
     let acc = 0;
     for (let i = 1; i < pts.length; i++) {
-      const L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) / total;
-      pos.push(pts[i - 1][0], pts[i - 1][1], 0, pts[i][0], pts[i][1], 0);
-      prog.push(0.12 + acc * 0.88, 0.12 + (acc + L) * 0.88);
+      const L = lens[i - 1] / total;
+      ribbon(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], 0.12 + acc * 0.88, 0.12 + (acc + L) * 0.88, W);
       acc += L;
     }
 
     /* 모서리 브래킷: 조립 초반에 먼저 박힌다 */
-    const K = 0.17;
+    const K = 0.17, BW = 0.0105;
     const corners = [[w, h, -1, -1], [-w, h, 1, -1], [-w, -h, 1, 1], [w, -h, -1, 1]];
     corners.forEach(([cx, cy, dx, dy], i) => {
       const p0 = 0.004 + i * 0.026;
-      pos.push(cx + dx * K, cy, 0, cx, cy, 0, cx, cy, 0, cx, cy + dy * K, 0);
-      prog.push(p0, p0 + 0.014, p0 + 0.014, p0 + 0.028);
+      ribbon(cx + dx * K, cy, cx, cy, p0, p0 + 0.014, BW);
+      ribbon(cx, cy, cx, cy + dy * K, p0 + 0.014, p0 + 0.028, BW);
     });
 
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
     g.setAttribute('aProg', new T.Float32BufferAttribute(prog, 1));
+    g.setAttribute('aSide', new T.Float32BufferAttribute(side, 1));
+    g.setIndex(idx);
 
     const uni = {
       uProg: { value: 0 },
@@ -1146,12 +1166,16 @@ function initScene(T) {
       transparent: true,
       depthWrite: false,
       depthTest: false,
+      side: T.DoubleSide,
       blending: T.AdditiveBlending,
       vertexShader: `
         attribute float aProg;
+        attribute float aSide;
         varying float vP;
+        varying float vS;
         void main(){
           vP = aProg;
+          vS = aSide;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }`,
       fragmentShader: `
@@ -1161,15 +1185,17 @@ function initScene(T) {
         uniform vec3 uColor;
         uniform float uHead;
         varying float vP;
+        varying float vS;
         void main(){
-          float built = 1.0 - smoothstep(uProg - 0.018, uProg + 0.018, vP);
-          float head = exp(-abs(vP - uProg) * 40.0) * uHead;
-          float a = uAlpha * (built * 0.58 + head * 1.95);
-          vec3 c = mix(uColor, vec3(1.0), clamp(head * 0.55, 0.0, 1.0));
+          float band = smoothstep(0.0, 0.38, vS) * (1.0 - smoothstep(0.62, 1.0, vS));
+          float built = 1.0 - smoothstep(uProg - 0.014, uProg + 0.014, vP);
+          float head = exp(-abs(vP - uProg) * 34.0) * uHead;
+          float a = uAlpha * band * (built * 0.62 + head * 1.7);
+          vec3 c = mix(uColor, vec3(1.0), clamp(head * 0.6, 0.0, 1.0));
           gl_FragColor = vec4(c, clamp(a, 0.0, 1.0));
         }`,
     });
-    const mesh = new T.LineSegments(g, mat);
+    const mesh = new T.Mesh(g, mat);
     mesh.frustumCulled = false;
     mesh.renderOrder = 26;
 
@@ -1177,18 +1203,15 @@ function initScene(T) {
     const targets = new Float32Array(FSLOT * 3);
     const progOf = new Float32Array(FSLOT);
     let travelled = 0, seg = 1;
-    for (let s = 0; s < FSLOT; s++) {
-      const want = (s + 0.5) / FSLOT * total;
-      while (seg < pts.length - 1 && travelled + Math.hypot(pts[seg][0] - pts[seg - 1][0], pts[seg][1] - pts[seg - 1][1]) < want) {
-        travelled += Math.hypot(pts[seg][0] - pts[seg - 1][0], pts[seg][1] - pts[seg - 1][1]);
-        seg++;
-      }
-      const segLen = Math.hypot(pts[seg][0] - pts[seg - 1][0], pts[seg][1] - pts[seg - 1][1]) || 1;
-      const f = clamp((want - travelled) / segLen, 0, 1);
-      targets[s * 3] = lerp(pts[seg - 1][0], pts[seg][0], f);
-      targets[s * 3 + 1] = lerp(pts[seg - 1][1], pts[seg][1], f);
-      targets[s * 3 + 2] = 0;
-      progOf[s] = 0.12 + (want / total) * 0.88;
+    for (let s2 = 0; s2 < FSLOT; s2++) {
+      const want = (s2 + 0.5) / FSLOT * total;
+      while (seg < pts.length - 1 && travelled + lens[seg - 1] < want) { travelled += lens[seg - 1]; seg++; }
+      const sl = lens[seg - 1] || 1;
+      const f = clamp((want - travelled) / sl, 0, 1);
+      targets[s2 * 3] = lerp(pts[seg - 1][0], pts[seg][0], f);
+      targets[s2 * 3 + 1] = lerp(pts[seg - 1][1], pts[seg][1], f);
+      targets[s2 * 3 + 2] = 0;
+      progOf[s2] = 0.12 + (want / total) * 0.88;
     }
 
     return { mesh, uni, targets, progOf, t: 0, alive: 0, active: false, prog: 0 };
@@ -1304,7 +1327,7 @@ function initScene(T) {
       if (!on) { f.done = false; }
       f.flash = Math.max(0, (f.flash || 0) - dt * 1.7);
       f.uni.uProg.value = on ? f.prog : 1;
-      f.uni.uAlpha.value = 0.72 * f.alive * (1 + f.flash * 0.55);
+      f.uni.uAlpha.value = 0.62 * f.alive * (1 + f.flash * 0.5);
       f.uni.uHead.value = on && f.prog < 0.995 ? 1.0 : 0.20 * f.alive;
       f.mesh.visible = f.alive > 0.008;
       const g = stageGroups[k];
