@@ -1110,7 +1110,7 @@ function initScene(T) {
       [w - c, -h], [-w + c, -h], [-w, -h + c], [-w, h - c], [-w + c, h],
     ];
     const pos = [], prog = [], side = [], idx = [];
-    const W = 0.0075;   // 테두리 두께(월드 단위)
+    const W = 0.016;   // 테두리 두께(월드 단위)
 
     /* 한 선분을 폭 있는 리본으로: 끝은 부드럽게 꺼진다 */
     function ribbon(x0, y0, x1, y1, p0, p1, wid) {
@@ -1141,7 +1141,7 @@ function initScene(T) {
     }
 
     /* 모서리 브래킷: 조립 초반에 먼저 박힌다 */
-    const K = 0.17, BW = 0.0105;
+    const K = 0.17, BW = 0.022;
     const corners = [[w, h, -1, -1], [-w, h, 1, -1], [-w, -h, 1, 1], [w, -h, -1, 1]];
     corners.forEach(([cx, cy, dx, dy], i) => {
       const p0 = 0.004 + i * 0.026;
@@ -1327,7 +1327,7 @@ function initScene(T) {
       if (!on) { f.done = false; }
       f.flash = Math.max(0, (f.flash || 0) - dt * 1.7);
       f.uni.uProg.value = on ? f.prog : 1;
-      f.uni.uAlpha.value = 0.62 * f.alive * (1 + f.flash * 0.5);
+      f.uni.uAlpha.value = 0.74 * f.alive * (1 + f.flash * 0.5);
       f.uni.uHead.value = on && f.prog < 0.995 ? 1.0 : 0.20 * f.alive;
       f.mesh.visible = f.alive > 0.008;
       const g = stageGroups[k];
