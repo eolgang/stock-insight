@@ -7,7 +7,7 @@
   "as_of": "2026-11-22 18:25 시험 브리핑 기준(음성 5단계 재생성) · 지수는 11/20(금) 마감",
   "voice": "ko-KR-SunHiNeural",
   "audio": {
-    "src": "data/briefing-2026-11-22.mp3",
+    "src": "data/briefing-2026-11-22.mp3?v=239",
     "duration": 239.64,
     "bytes": 1438032,
     "segments": [
