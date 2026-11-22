@@ -2178,8 +2178,7 @@ function buildStage(T, s, opt) {
   /* 패널 몸체는 입자 테두리가 조립된 뒤에 늦게 나타난다 */
   panel.material.userData.frameGated = true;
 
-  const panelY = visual === 'weather' ? -0.58 : -0.44;
-  const panelC = add(panel, { y: panelY, z: 1.2, rx: -0.02, delay: 0 });
+  const panelC = add(panel, { y: -0.44, z: 1.2, rx: -0.02, delay: 0 });
   g.userData.panel = panelC;
   g.userData.gate = GATE_START; // 시작 전엔 숨김
 
@@ -2203,23 +2202,22 @@ function buildStage(T, s, opt) {
     mesh.material.map = tex2.material.map;
     mesh.material.needsUpdate = true;
     if (old) old.dispose();
-    if (g.userData.onWeatherCue) g.userData.onWeatherCue(s);
   };
 
   /* 단계별 3D 오브젝트 */
   if (visual === 'weather') {
-    // 앰버 기온 게이지 (분할 호 + 방사 눈금) — 옅게 바닥 보조
+    // 앰버 기온 게이지 (분할 호 + 방사 눈금)
     const arcG = new T.Group();
     const amber = 0xffc76b;
     const arcMat = new T.MeshBasicMaterial({
-      color: amber, transparent: true, opacity: 0.34,
+      color: amber, transparent: true, opacity: 0.55,
       blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide,
     });
     [[0.30, 1.15], [2.15, 1.05], [4.05, 0.95]].forEach(([from, len]) => {
       arcG.add(new T.Mesh(new T.RingGeometry(1.32, 1.326, 96, 1, from, len), arcMat));
     });
     const tickMat = new T.MeshBasicMaterial({
-      color: amber, transparent: true, opacity: 0.32,
+      color: amber, transparent: true, opacity: 0.5,
       blending: T.AdditiveBlending, depthWrite: false,
     });
     for (let i = 0; i < 36; i++) {
@@ -2233,330 +2231,6 @@ function buildStage(T, s, opt) {
     arcG.rotation.set(1.30, 0.18, 0.1);
     add(arcG, { y: 0, z: 0, delay: 0.05 });
     g.userData.arcG = arcG;
-
-    // 3D 날씨 입자 모핑 (해 / 구름 / 우산+비 / 눈결정) — 입자가 모여 형상을 만들고 흩어짐
-    const WX_N = 360;
-    const detectWeatherKind = (stObj) => {
-      const txt = `${stObj.title || ''} ${stObj.headline || ''} ${stObj.sub || ''} ${stObj.caption || ''}`;
-      if (/눈|적설|폭설|함박/.test(txt)) return 'snow';
-      if (/비|우산|소나기|호우|강수\s*[5-9]\d%|강수\s*100%/.test(txt)) return 'rain';
-      if (/구름|흐림|안개/.test(txt)) return 'cloud';
-      return 'sun';
-    };
-
-    const makeWeatherTargets = (kind) => {
-      const pts = new Float32Array(WX_N * 3);
-      const role = new Uint8Array(WX_N); // 0=shape, 1=falling rain/snow, 2=ray
-      let idx = 0;
-      const put = (x, y, z, r = 0) => {
-        if (idx >= WX_N) return;
-        pts[idx * 3] = x; pts[idx * 3 + 1] = y; pts[idx * 3 + 2] = z;
-        role[idx] = r;
-        idx++;
-      };
-      if (kind === 'rain') {
-        // 우산 갓 (아치 + 6갈래 립 + 손잡이 J자) ~250개 + 빗줄기 ~110개
-        for (let i = 0; i < 90; i++) {
-          const t = i / 89;
-          const th = t * Math.PI;
-          const x = Math.cos(th) * 0.72;
-          const y = Math.sin(th) * 0.38 + 0.04;
-          const sc = Math.sin(th * 6) * 0.025;
-          put(x, y + sc, Math.sin(i * 1.7) * 0.08, 0);
-        }
-        // 우산 립 5개
-        for (let r = -2; r <= 2; r++) {
-          const rx = r * 0.30;
-          for (let j = 0; j < 20; j++) {
-            const t = j / 19;
-            const x = rx * t;
-            const y = 0.42 * (1 - t * t * 0.90) + 0.04;
-            const z = (r % 2 === 0 ? 1 : -1) * 0.14 * t;
-            put(x, y, z, 0);
-          }
-        }
-        // 우산 대 + J 손잡이
-        for (let j = 0; j < 40; j++) {
-          const t = j / 39;
-          put(0, 0.44 - t * 0.74, 0, 0);
-        }
-        for (let j = 0; j < 20; j++) {
-          const a = Math.PI + (j / 19) * Math.PI;
-          put(0.085 + Math.cos(a) * 0.085, -0.30 + Math.sin(a) * 0.085, 0, 0);
-        }
-        // 떨어지는 빗줄기
-        while (idx < WX_N) {
-          const rx = (Math.random() - 0.5) * 1.7;
-          const ry = (Math.random() - 0.5) * 1.3;
-          const rz = (Math.random() - 0.5) * 0.5;
-          put(rx, ry, rz, 1);
-        }
-      } else if (kind === 'snow') {
-        // 6각 눈결정 + 흩날리는 눈송이
-        for (let arm = 0; arm < 6; arm++) {
-          const a = (arm / 6) * Math.PI * 2;
-          const ca = Math.cos(a), sa = Math.sin(a);
-          for (let j = 0; j < 24; j++) {
-            const r = 0.06 + (j / 23) * 0.52;
-            put(ca * r, sa * r, Math.sin(j * 0.5) * 0.02, 0);
-          }
-          // 가지 V자 2쌍
-          [0.24, 0.40].forEach((br) => {
-            [-0.55, 0.55].forEach((da) => {
-              const ba = a + da;
-              for (let k = 1; k <= 7; k++) {
-                const d = k * 0.024;
-                put(ca * br + Math.cos(ba) * d, sa * br + Math.sin(ba) * d, 0, 0);
-              }
-            });
-          });
-        }
-        while (idx < WX_N) {
-          put((Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 0.5, 1);
-        }
-      } else if (kind === 'cloud') {
-        // 겹친 구름 덩어리
-        const puffs = [[0, 0.14, 0.34], [-0.34, 0.02, 0.25], [0.34, 0.04, 0.27], [-0.16, -0.05, 0.22], [0.18, -0.05, 0.22]];
-        while (idx < WX_N) {
-          const p = puffs[idx % puffs.length];
-          const a = Math.random() * Math.PI * 2;
-          const rr = (0.55 + Math.random() * 0.45) * p[2];
-          put(p[0] + Math.cos(a) * rr, p[1] + Math.sin(a) * rr * 0.78, (Math.random() - 0.5) * 0.22, 0);
-        }
-      } else {
-        // 해: 중심 원 + 12개 방사형 빛살
-        for (let i = 0; i < 160; i++) {
-          const a = (i / 160) * Math.PI * 2;
-          const ring = (i % 3 === 0) ? 0.26 : (i % 3 === 1 ? 0.20 : 0.12);
-          put(Math.cos(a) * ring, Math.sin(a) * ring, Math.sin(a * 3) * 0.04, 0);
-        }
-        for (let ray = 0; ray < 12; ray++) {
-          const a = (ray / 12) * Math.PI * 2;
-          const len = ray % 2 === 0 ? 12 : 8;
-          for (let k = 0; k < len; k++) {
-            const r = 0.34 + k * 0.028;
-            put(Math.cos(a) * r, Math.sin(a) * r, 0, 2);
-          }
-        }
-        while (idx < WX_N) {
-          const a = Math.random() * Math.PI * 2;
-          const r = 0.15 + Math.random() * 0.52;
-          put(Math.cos(a) * r, Math.sin(a) * r, (Math.random() - 0.5) * 0.25, 2);
-        }
-      }
-      return { pts, role };
-    };
-
-    // 둥근 발광 입자 텍스처 (네모 픽셀 대신 부드러운 원형 빛)
-    const dotC = document.createElement('canvas');
-    dotC.width = dotC.height = 64;
-    const dctx = dotC.getContext('2d');
-    const grd = dctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    grd.addColorStop(0, 'rgba(255,255,255,1)');
-    grd.addColorStop(0.35, 'rgba(255,255,255,0.75)');
-    grd.addColorStop(1, 'rgba(255,255,255,0)');
-    dctx.fillStyle = grd;
-    dctx.fillRect(0, 0, 64, 64);
-    const dotTex = new T.CanvasTexture(dotC);
-
-    const wxGeo = new T.BufferGeometry();
-    const wxPos = new Float32Array(WX_N * 3);
-    const wxCur = new Float32Array(WX_N * 3);
-    for (let i = 0; i < WX_N; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = 0.6 + Math.random() * 0.9;
-      wxCur[i * 3] = Math.cos(a) * r;
-      wxCur[i * 3 + 1] = (Math.random() - 0.5) * 1.1;
-      wxCur[i * 3 + 2] = Math.sin(a) * r * 0.5;
-    }
-    wxGeo.setAttribute('position', new T.BufferAttribute(wxPos, 3));
-    const wxMat = new T.PointsMaterial({
-      color: 0x9cf7df,
-      map: dotTex,
-      size: (opt && opt.isPhone) ? 0.032 : 0.026,
-      transparent: true,
-      opacity: 0.85,
-      blending: T.AdditiveBlending,
-      depthWrite: false,
-      sizeAttenuation: true,
-    });
-    wxMat.userData.base = 0.85;
-    const wxPoints = new T.Points(wxGeo, wxMat);
-
-    // 매끈한 네온 와이어프레임 선 레이어 (우산·빗줄기·해·눈결정·구름)
-    const wxLineMat = new T.LineBasicMaterial({
-      color: 0x88f7dc,
-      transparent: true,
-      opacity: 0.78,
-      blending: T.AdditiveBlending,
-      depthWrite: false,
-    });
-    wxLineMat.userData.base = 0.78;
-    const wxLineGroup = new T.Group();
-
-    const buildWxLines = (kind) => {
-      while (wxLineGroup.children.length) {
-        const ch = wxLineGroup.children.pop();
-        if (ch.geometry) ch.geometry.dispose();
-      }
-      const segs = [];
-      const addSeg = (x1, y1, z1, x2, y2, z2) => { segs.push(x1, y1, z1, x2, y2, z2); };
-      if (kind === 'rain') {
-        // 3D 우산 갓 (6개 곡선 립 + 물결 밑단 + 대 + J 손잡이)
-        const ribs = 6;
-        const R = 0.72, H = 0.42, Y0 = 0.04;
-        for (let r = 0; r < ribs; r++) {
-          const phi = (r / ribs) * Math.PI * 2;
-          const cp = Math.cos(phi), sp = Math.sin(phi);
-          for (let j = 0; j < 14; j++) {
-            const t1 = j / 14, t2 = (j + 1) / 14;
-            const r1 = R * Math.sin(t1 * Math.PI * 0.5), y1 = Y0 + H * Math.cos(t1 * Math.PI * 0.5);
-            const r2 = R * Math.sin(t2 * Math.PI * 0.5), y2 = Y0 + H * Math.cos(t2 * Math.PI * 0.5);
-            addSeg(cp * r1, y1, sp * r1 * 0.65, cp * r2, y2, sp * r2 * 0.65);
-          }
-        }
-        // 우산 밑단 물결 테두리
-        const edgeSteps = 72;
-        for (let i = 0; i < edgeSteps; i++) {
-          const p1 = (i / edgeSteps) * Math.PI * 2;
-          const p2 = ((i + 1) / edgeSteps) * Math.PI * 2;
-          const sc1 = Math.abs(Math.sin(p1 * ribs * 0.5)) * 0.045;
-          const sc2 = Math.abs(Math.sin(p2 * ribs * 0.5)) * 0.045;
-          addSeg(Math.cos(p1) * R, Y0 + sc1, Math.sin(p1) * R * 0.65, Math.cos(p2) * R, Y0 + sc2, Math.sin(p2) * R * 0.65);
-        }
-        // 우산 대 + J 손잡이
-        addSeg(0, Y0 + H + 0.05, 0, 0, -0.32, 0);
-        for (let j = 0; j < 14; j++) {
-          const a1 = Math.PI + (j / 14) * Math.PI;
-          const a2 = Math.PI + ((j + 1) / 14) * Math.PI;
-          addSeg(0.08 + Math.cos(a1) * 0.08, -0.32 + Math.sin(a1) * 0.08, 0, 0.08 + Math.cos(a2) * 0.08, -0.32 + Math.sin(a2) * 0.08, 0);
-        }
-      } else if (kind === 'snow') {
-        for (let arm = 0; arm < 6; arm++) {
-          const a = (arm / 6) * Math.PI * 2;
-          const ca = Math.cos(a), sa = Math.sin(a);
-          addSeg(0, 0, 0, ca * 0.58, sa * 0.58, 0);
-          [0.24, 0.42].forEach((br, bi) => {
-            const len = bi === 0 ? 0.16 : 0.11;
-            [-0.58, 0.58].forEach((da) => {
-              addSeg(ca * br, sa * br, 0, ca * br + Math.cos(a + da) * len, sa * br + Math.sin(a + da) * len, 0);
-            });
-          });
-        }
-        for (let i = 0; i < 6; i++) {
-          const a1 = (i / 6) * Math.PI * 2, a2 = ((i + 1) / 6) * Math.PI * 2;
-          addSeg(Math.cos(a1) * 0.14, Math.sin(a1) * 0.14, 0, Math.cos(a2) * 0.14, Math.sin(a2) * 0.14, 0);
-        }
-      } else if (kind === 'cloud') {
-        const arcs = [[0, 0.14, 0.32, 0, Math.PI], [-0.30, 0.02, 0.22, Math.PI * 0.35, Math.PI * 1.4], [0.30, 0.03, 0.24, -Math.PI * 0.4, Math.PI * 0.65]];
-        arcs.forEach(([cx, cy, r, s0, s1]) => {
-          for (let j = 0; j < 20; j++) {
-            const a1 = s0 + (j / 20) * (s1 - s0), a2 = s0 + ((j + 1) / 20) * (s1 - s0);
-            addSeg(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r * 0.85, 0, cx + Math.cos(a2) * r, cy + Math.sin(a2) * r * 0.85, 0);
-          }
-        });
-        addSeg(-0.38, -0.17, 0, 0.38, -0.17, 0);
-      } else {
-        // 해: 깔끔한 동심원 + 12갈래 가느다란 빛살
-        [0.22, 0.29].forEach((rr) => {
-          for (let i = 0; i < 48; i++) {
-            const a1 = (i / 48) * Math.PI * 2, a2 = ((i + 1) / 48) * Math.PI * 2;
-            addSeg(Math.cos(a1) * rr, Math.sin(a1) * rr, 0, Math.cos(a2) * rr, Math.sin(a2) * rr, 0);
-          }
-        });
-        for (let r = 0; r < 12; r++) {
-          const a = (r / 12) * Math.PI * 2;
-          const rIn = 0.35, rOut = r % 2 === 0 ? 0.56 : 0.47;
-          addSeg(Math.cos(a) * rIn, Math.sin(a) * rIn, 0, Math.cos(a) * rOut, Math.sin(a) * rOut, 0);
-        }
-      }
-      const gL = new T.BufferGeometry();
-      gL.setAttribute('position', new T.Float32BufferAttribute(segs, 3));
-      wxLineGroup.add(new T.LineSegments(gL, wxLineMat));
-    };
-
-    const wxGroup = new T.Group();
-    wxGroup.add(wxPoints, wxLineGroup);
-    add(wxGroup, { y: 0.34, z: 0.62, delay: 0.08 });
-
-    let wxKind = detectWeatherKind(s);
-    let wxTarget = makeWeatherTargets(wxKind);
-    let wxPhaseT = 0;
-    let wxScatter = 0.9; // 처음 진입 시 바깥에서 모여듦
-
-    const applyWxColor = (kind) => {
-      const hex = kind === 'sun' ? 0xffd47a : (kind === 'snow' ? 0xd4f3ff : 0x7df5d7);
-      wxMat.color.setHex(hex);
-      wxLineMat.color.setHex(hex);
-    };
-    applyWxColor(wxKind);
-    buildWxLines(wxKind);
-
-    g.userData.onWeatherCue = (nextS) => {
-      const nk = detectWeatherKind(nextS);
-      if (nk !== wxKind) {
-        wxKind = nk;
-        wxTarget = makeWeatherTargets(wxKind);
-        applyWxColor(wxKind);
-        buildWxLines(wxKind);
-        wxScatter = 1.0; // 흩어졌다가 새 모양으로 모임
-        wxPhaseT = 0;
-      }
-    };
-
-    g.userData.wxTick = (now, dt) => {
-      wxPhaseT += dt;
-      // 약 14초마다 살짝 흩어졌다 다시 모이는 호흡 연출
-      const cycle = wxPhaseT % 14.0;
-      const autoScatter = cycle > 11.8 ? Math.sin(((cycle - 11.8) / 2.2) * Math.PI) * 0.55 : 0;
-      wxScatter = Math.max(0, wxScatter - dt * 0.72);
-      const disp = clamp(wxScatter + autoScatter, 0, 1);
-      wxLineMat.userData.base = 0.78 * clamp(1 - disp * 1.4, 0.05, 1);
-
-      const tPts = wxTarget.pts;
-      const roles = wxTarget.role;
-      const pull = 1 - Math.exp(-dt * (disp > 0.35 ? 1.8 : 4.2));
-      for (let i = 0; i < WX_N; i++) {
-        const i3 = i * 3;
-        const r = roles[i];
-        let tx = tPts[i3];
-        let ty = tPts[i3 + 1];
-        let tz = tPts[i3 + 2];
-
-        if (r === 1) {
-          // 비/눈 낙하 루프
-          const spd = wxKind === 'rain' ? 1.15 : 0.32;
-          const span = 1.3;
-          const off = ((ty - now * spd + 0.65) % span + span) % span - 0.65;
-          ty = off;
-          if (wxKind === 'rain') tx += off * 0.14;
-          else tx += Math.sin(now * 1.4 + i) * 0.05;
-        } else if (r === 2) {
-          const pulse = 1 + Math.sin(now * 2.2 + i * 0.2) * 0.08;
-          tx *= pulse; ty *= pulse;
-        }
-
-        if (disp > 0.01) {
-          const ang = now * 1.1 + i * 0.37;
-          const sx = Math.cos(ang) * (0.7 + (i % 7) * 0.09);
-          const sy = Math.sin(ang * 0.8 + i) * 0.55;
-          const sz = Math.sin(ang) * 0.5;
-          tx = lerp(tx, sx, disp);
-          ty = lerp(ty, sy, disp);
-          tz = lerp(tz, sz, disp);
-        }
-
-        wxCur[i3] += (tx - wxCur[i3]) * pull;
-        wxCur[i3 + 1] += (ty - wxCur[i3 + 1]) * pull;
-        wxCur[i3 + 2] += (tz - wxCur[i3 + 2]) * pull;
-
-        wxPos[i3] = wxCur[i3] + Math.sin(now * 1.6 + i) * 0.008;
-        wxPos[i3 + 1] = wxCur[i3 + 1] + Math.cos(now * 1.3 + i * 0.7) * 0.008;
-        wxPos[i3 + 2] = wxCur[i3 + 2];
-      }
-      wxGeo.attributes.position.needsUpdate = true;
-      wxGroup.rotation.y = Math.sin(now * 0.42) * 0.22;
-    };
   }
 
   if (visual === 'us' || s.id === 'us') {
@@ -2615,7 +2289,7 @@ function buildStage(T, s, opt) {
 
   g.userData.layers = layers;
   g.userData.v = 0;
-  g.userData.tick = g.tick = (now, dt, vis) => {
+  g.tick = (now, dt, vis) => {
     if (g.userData.bars) {
       const e = easeOut(clamp(vis, 0, 1));
       g.userData.bars.scale.set(1, Math.max(0.001, e), 1);
@@ -2623,9 +2297,6 @@ function buildStage(T, s, opt) {
     }
     if (g.userData.arcG) {
       g.userData.arcG.rotation.z = now * 0.12;
-    }
-    if (g.userData.wxTick) {
-      g.userData.wxTick(now, dt);
     }
     layers.forEach((c, i) => {
       c.position.y = c.userData.baseY + Math.sin(now * 0.6 + i * 1.3) * 0.014;
