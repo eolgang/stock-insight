@@ -581,7 +581,6 @@ function syncStage(force) {
     applyCue(i, t);
     renderCaption(i);
     if (sceneApi && sceneApi.rebuildPanels) sceneApi.rebuildPanels();
-    if (c && typeof c.pct === 'number' && sceneApi && sceneApi.pulseNumber) sceneApi.pulseNumber();
   }
 }
 
@@ -1430,167 +1429,6 @@ function initScene(T) {
   dust.renderOrder = 8;
   scene.add(dust);
 
-  /* =============================================================
-     핵심 숫자를 입자로 뭉쳐 만드는 연출
-     - 패널의 큰 값(지수·등락률)을 오프스크린 캔버스에 그려 픽셀을 샘플링하고,
-       표류하던 입자가 그 좌표로 날아가 모인다(프레임 조립과 같은 이징).
-     - 다 모인 뒤에는 입자는 배경으로 남고, 선명한 숫자 텍스트는 패널이 그대로 그린다.
-     ============================================================= */
-  const NPS = reduced ? 0 : (isPhone ? 170 : 300);
-  const numSys = { si: -99, t: 0, targets: [], col: new T.Color(0x7cf5c8), colTo: new T.Color(0x7cf5c8) };
-  const nPos = new Float32Array(Math.max(1, NPS) * 3);
-  const nAlpha = new Float32Array(Math.max(1, NPS));
-  const nud = {
-    ang: new Float32Array(NPS), r: new Float32Array(NPS), y: new Float32Array(NPS),
-    spd: new Float32Array(NPS), ph: new Float32Array(NPS), w1: new Float32Array(NPS),
-    w2: new Float32Array(NPS), w3: new Float32Array(NPS), size: new Float32Array(NPS),
-    bright: new Float32Array(NPS), delay: new Float32Array(NPS), tgt: new Int16Array(NPS),
-  };
-  for (let i = 0; i < NPS; i++) {
-    nud.ang[i] = Math.random() * 6.2831;
-    nud.r[i] = 1.7 + Math.pow(Math.random(), 0.7) * 2.3;
-    nud.y[i] = (Math.random() * 2 - 1) * 2.2;
-    nud.spd[i] = (0.008 + Math.random() * 0.02) * (Math.random() < 0.5 ? -1 : 1);
-    nud.ph[i] = Math.random() * 6.2831;
-    nud.w1[i] = 0.10 + Math.random() * 0.22;
-    nud.w2[i] = 0.08 + Math.random() * 0.20;
-    nud.w3[i] = 0.09 + Math.random() * 0.20;
-    nud.size[i] = 0.0075 + Math.pow(Math.random(), 2) * 0.0065;
-    nud.bright[i] = 0.55 + Math.random() * 0.45;
-    nud.delay[i] = Math.random();
-    nud.tgt[i] = i;
-  }
-  let numPoints = null;
-  if (NPS) {
-    const nGeo = new T.BufferGeometry();
-    nGeo.setAttribute('position', new T.BufferAttribute(nPos, 3));
-    nGeo.setAttribute('aSize', new T.Float32BufferAttribute(Float32Array.from(nud.size), 1));
-    nGeo.setAttribute('aAlpha', new T.BufferAttribute(nAlpha, 1));
-    const numMat = new T.ShaderMaterial({
-      uniforms: { uSize: eU.uSize, uColor: { value: numSys.col } },
-      transparent: true,
-      depthWrite: false,
-      blending: T.AdditiveBlending,
-      vertexShader: `
-        attribute float aSize;
-        attribute float aAlpha;
-        uniform float uSize;
-        varying float vA;
-        void main(){
-          vA = aAlpha;
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * uSize / max(0.5, -mv.z);
-          gl_Position = projectionMatrix * mv;
-        }`,
-      fragmentShader: `
-        precision highp float;
-        uniform vec3 uColor;
-        varying float vA;
-        void main(){
-          vec2 q = gl_PointCoord - 0.5;
-          float r = length(q) * 2.0;
-          if (r > 1.0) discard;
-          vec3 c = mix(uColor, vec3(1.0), 0.38);
-          gl_FragColor = vec4(c, pow(1.0 - r, 2.0) * vA);
-        }`,
-    });
-    numPoints = new T.Points(nGeo, numMat);
-    numPoints.frustumCulled = false;
-    numPoints.renderOrder = 21;   // 패널(20) 위, 테두리 리본(26) 아래
-    scene.add(numPoints);
-  }
-
-  /* 패널의 큰 숫자 영역 → 입자 목표 좌표(월드)
-     획 위에 정확히 겹치면 글자가 가려지므로 중심에서 살짝 밖으로 퍼뜨려 테두리처럼 남긴다. */
-  function numTargets(k) {
-    if (!NPS) return [];
-    const g = stageGroups[k];
-    const rect = g && g.userData.numRect;
-    const text = g && g.userData.numText;
-    if (!rect || !text) return [];
-    const rw = Math.max(1, rect.r - rect.l), rh = Math.max(1, rect.b - rect.t);
-    const pts = sampleTextPoints(text, rw / rh, NPS);
-    const sc = frameSpace.s, py = frameSpace.py;
-    const cx = ((rect.l + rect.r) / 2) / rect.W * 3.16 - 1.58;
-    const cy = 0.485 - ((rect.t + rect.b) / 2) / rect.H * 0.97;
-    const OUT = 1.07;
-    return pts.map((p) => {
-      const lx = (rect.l + p[0] * rw) / rect.W * 3.16 - 1.58;
-      const ly = 0.485 - (rect.t + p[1] * rh) / rect.H * 0.97;
-      const jx = (Math.random() - 0.5) * 0.008, jy = (Math.random() - 0.5) * 0.008;
-      return [(cx + (lx - cx) * OUT + jx) * sc, (py + cy + (ly - cy) * OUT + jy) * sc, 1.2];
-    });
-  }
-
-  /* 화면(NDC) 좌표 → z=1.2 평면의 월드 좌표 (카메라 기울기를 그대로 반영) */
-  function ndcToPlane(nx, ny) {
-    const ray = new T.Raycaster();
-    ray.setFromCamera(new T.Vector2(nx, ny), camera);
-    const hit = new T.Vector3();
-    const ok = ray.ray.intersectPlane(new T.Plane(new T.Vector3(0, 0, 1), -1.2), hit);
-    return ok ? hit : null;
-  }
-
-  /* 인트로의 날짜(11.22)도 같은 방식으로 입자가 모여 만든다 */
-  function introTargets() {
-    if (!NPS) return [];
-    const el = $('introNum');
-    if (!el) return [];
-    const r = el.getBoundingClientRect();
-    if (!r || r.width < 40 || !layout.w) return [];
-    const pBL = ndcToPlane((r.left / layout.w) * 2 - 1, 1 - ((r.top + r.height) / layout.h) * 2);
-    const pTR = ndcToPlane(((r.left + r.width) / layout.w) * 2 - 1, 1 - (r.top / layout.h) * 2);
-    if (!pBL || !pTR) return [];
-    const cxw = (pBL.x + pTR.x) / 2, cyw = (pBL.y + pTR.y) / 2;
-    const wWorld = Math.abs(pTR.x - pBL.x), hWorld = Math.abs(pTR.y - pBL.y);
-    const text = String(DOC.date || '').slice(5).replace('-', '.') || 'HOLO';
-    const pts = sampleTextPoints(text, wWorld / Math.max(0.1, hWorld * 0.62), NPS);
-    return pts.map((p) => [cxw + (p[0] - 0.5) * wWorld, cyw - (p[1] - 0.5) * hWorld, 1.2]);
-  }
-
-  function updateNumbers(dt, now, st) {
-    if (!NPS || !numPoints) return;
-    const si = st.started ? st.idx : -2;
-    if (si !== numSys.si) {
-      numSys.si = si;
-      numSys.t = 0;
-      numSys.targets = si >= 0 ? numTargets(si) : (si === -2 ? introTargets() : []);
-      const acc = si >= 0 && STAGES[si] && STAGES[si].accent;
-      if (acc) numSys.colTo.set(acc);
-    }
-    numSys.t += dt;
-    numSys.col.lerp(numSys.colTo, 1 - Math.exp(-dt * 5.0));
-    const T0 = 0.12, DUR = 0.42;   /* 0.12s에 날기 시작 → 0.54s쯤 뭉침 완료 */
-    const nt = numSys.targets.length;
-    for (let i = 0; i < NPS; i++) {
-      const ang = nud.ang[i] + now * nud.spd[i];
-      let x = Math.cos(ang) * nud.r[i] * 0.85 + Math.sin(now * nud.w1[i] + nud.ph[i]) * 0.20;
-      let y = nud.y[i] + Math.sin(now * nud.w2[i] + nud.ph[i] * 1.7) * 0.24;
-      let z = Math.sin(ang) * nud.r[i] * 1.40 + Math.cos(now * nud.w3[i] + nud.ph[i]) * 0.20;
-      let a = nud.bright[i] * (0.028 + 0.05 * conv.act) * (0.8 + 0.2 * Math.sin(now * 0.9 + nud.ph[i]));
-
-      if (nt) {
-        const tg = numSys.targets[nud.tgt[i] % nt];
-        const d = clamp((numSys.t - T0 - nud.delay[i] * 0.12) / DUR, 0, 1);
-        const e = easeOut(d);
-        if (e > 0) {
-          x = lerp(x, tg[0], e) + Math.sin(now * 1.9 + nud.ph[i] * 2.0) * 0.0022 * e;
-          y = lerp(y, tg[1], e) + Math.sin(Math.PI * e) * 0.10 + Math.cos(now * 1.5 + nud.ph[i]) * 0.0022 * e;
-          z = lerp(z, tg[2] + Math.sin(nud.ph[i] * 3.0) * 0.02, e);
-          a = lerp(a, 1.0 * nud.bright[i], e);
-        }
-        /* 모인 뒤 잠시 머물다 배경 입자로 풀린다 */
-        const hold = clamp((numSys.t - 2.0) / 1.8, 0, 1);
-        a *= 1 - hold * 0.80;
-      }
-      const i3 = i * 3;
-      nPos[i3] = x; nPos[i3 + 1] = y; nPos[i3 + 2] = z;
-      nAlpha[i] = clamp(a, 0, 1);
-    }
-    numPoints.geometry.attributes.position.needsUpdate = true;
-    numPoints.geometry.attributes.aAlpha.needsUpdate = true;
-  }
-
   function updateDust(dt, now, st) {
     const activeIdx = st.started ? st.idx : -1;
     const fr = activeIdx >= 0 ? frameSys[activeIdx] : null;
@@ -1846,10 +1684,6 @@ function initScene(T) {
       accentTo.set(acc).lerp(MINT, 0.58);
       if (!immediate && i >= 0) { energyBurst(); ringBurst(); }
     },
-    pulseNumber() {
-      numSys.si = -99;
-      numSys.t = 0;
-    },
     rebuildPanels() {
       stageGroups.forEach((g) => { if (g.userData.rebuildPanel) g.userData.rebuildPanel(); });
     },
@@ -1918,10 +1752,9 @@ function initScene(T) {
         });
       });
 
-      /* 에너지 입자 · 표류 입자(프레임 조립) · 숫자 입자 */
+      /* 에너지 입자 · 표류 입자(프레임 조립) */
       updateEnergy(dt, now);
       updateDust(dt, now, st);
-      updateNumbers(dt, now, st);
 
       farStars.rotation.y = -now * 0.008;
 
@@ -2006,10 +1839,7 @@ function initScene(T) {
     stages: STAGES.map((s) => ({ id: s.id, visual: s.visual, pct: s.pct, dir: s.dir, accent: s.accent, frame: s._frame })),
     panelOp: stageGroups.map((g) => +(g.userData.panel ? g.userData.panel.children[0].material.opacity : -1).toFixed(2)),
     pv: stageGroups.map((g) => +g.userData.v.toFixed(2)),
-    particles: { dust: DUST, num: NPS, energy: EPC, far: 260 },
-    numT: +numSys.t.toFixed(2), numTargets: numSys.targets.length,
-    numSample: numSys.targets.map((p) => [+p[0].toFixed(3), +p[1].toFixed(3)]),
-    numRect: (stageGroups[Math.max(0, state.idx)] && stageGroups[Math.max(0, state.idx)].userData.numRect) || null,
+    particles: { dust: DUST, energy: EPC, far: 260 },
   });
   return api;
 }
@@ -2138,50 +1968,6 @@ function makeTexture(T, canvas, modelW, modelH) {
   return mesh;
 }
 
-/* 텍스트를 픽셀로 샘플링 → 입자가 모일 정규화 좌표(0~1)
-   오프스크린 캔버스에 글자를 그리고 알파가 있는 픽셀만 골라 고르게 솎아 낸다. */
-function sampleTextPoints(text, aspect, want) {
-  const H2 = 90;
-  const W2 = clamp(Math.round(H2 * Math.max(0.8, aspect)), 40, 560);
-  const cv = document.createElement('canvas');
-  cv.width = W2; cv.height = H2;
-  const x = cv.getContext('2d', { willReadFrequently: true });
-  if (!x) return [];
-  let fs = Math.round(H2 * 0.86);
-  x.font = '700 ' + fs + 'px ' + FONT_MONO;
-  const w0 = x.measureText(text).width;
-  const maxW = W2 * 0.96;
-  if (w0 > maxW) {
-    fs = Math.max(6, Math.floor(fs * maxW / w0));
-    x.font = '700 ' + fs + 'px ' + FONT_MONO;
-  }
-  x.fillStyle = '#fff';
-  x.textBaseline = 'middle';
-  x.fillText(text, (W2 - x.measureText(text).width) / 2, H2 * 0.52);
-  let data;
-  try { data = x.getImageData(0, 0, W2, H2).data; } catch (e) { return []; }
-  const pts = [];
-  const seen = new Set();
-  for (let py = 0; py < H2; py++) {
-    for (let px = 0; px < W2; px++) {
-      if (data[(py * W2 + px) * 4 + 3] <= 110) continue;
-      /* 4px 격자로 한 점씩 → 획 위에 고르게 (몰림/빈틈 방지) */
-      const k = (px >> 2) * 4096 + (py >> 2);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      pts.push([px / W2, py / H2]);
-    }
-  }
-  if (!pts.length) return [];
-  for (let i = pts.length - 1; i > 0; i--) {
-    const j = (Math.random() * (i + 1)) | 0;
-    const t = pts[i]; pts[i] = pts[j]; pts[j] = t;
-  }
-  const out = [];
-  for (let i = 0; i < want; i++) out.push(pts[(i * pts.length / want) | 0]);
-  return out;
-}
-
 /* 깎인 HUD 프레임 패널 */
 function hudPanel(T, opt) {
   const W = 1400, H = 430;
@@ -2289,11 +2075,7 @@ function hudPanel(T, opt) {
   }
 
 
-  const mesh = makeTexture(T, cv, 3.16, 0.97);
-  /* 큰 숫자의 캔버스 영역 — 입자가 이 자리로 모여 숫자 모양을 만든다 */
-  mesh.userData.valueRect = { l: padL, r: Math.min(W - 20, padL + vw), t: 96, b: 108 + vs, W, H };
-  mesh.userData.valueText = value;
-  return mesh;
+  return makeTexture(T, cv, 3.16, 0.97);
 }
 
 /* 얇은 홀로그램 칩 */
@@ -2399,8 +2181,6 @@ function buildStage(T, s, opt) {
   const panelC = add(panel, { y: -0.44, z: 1.2, rx: -0.02, delay: 0 });
   g.userData.panel = panelC;
   g.userData.gate = GATE_START; // 시작 전엔 숨김
-  g.userData.numText = panel.userData.valueText || value;
-  g.userData.numRect = panel.userData.valueRect || null;
 
   /* cue 전환: 패널 텍스처를 새 내용으로 다시 그린다 (테두리·레이아웃 그대로) */
   g.userData.rebuildPanel = () => {
@@ -2422,8 +2202,6 @@ function buildStage(T, s, opt) {
     mesh.material.map = tex2.material.map;
     mesh.material.needsUpdate = true;
     if (old) old.dispose();
-    g.userData.numText = tex2.userData.valueText || v2;
-    g.userData.numRect = tex2.userData.valueRect || null;
   };
 
   /* 단계별 3D 오브젝트 */
