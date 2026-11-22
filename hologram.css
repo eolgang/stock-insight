@@ -126,7 +126,7 @@ body.no3d .scanlines{opacity:.06}
   color:rgba(214,255,242,.95);
   margin-bottom:clamp(8px,1.4vh,16px);
   text-indent:.34em;
-  text-shadow:0 0 4px rgba(2,9,6,1), 0 0 10px rgba(2,9,6,1), 0 0 18px rgba(2,9,6,.95);
+  text-shadow:0 1px 3px rgba(2,9,6,.95), 0 0 9px rgba(2,9,6,.75);
 }
 .intro-num{
   font-family:var(--sans);
@@ -148,7 +148,7 @@ body.no3d .scanlines{opacity:.06}
 }
 .intro-sub{
   margin-top:clamp(12px,2.2vh,22px);
-  text-shadow:0 0 4px rgba(2,9,6,1), 0 0 10px rgba(2,9,6,1), 0 0 18px rgba(2,9,6,.95);
+  text-shadow:0 1px 3px rgba(2,9,6,.95), 0 0 9px rgba(2,9,6,.75);
   font-family:var(--mono); font-size:10.5px; letter-spacing:.14em;
   color:rgba(228,248,242,.92); text-transform:uppercase;
 }
@@ -183,9 +183,9 @@ body.no3d .scanlines{opacity:.06}
   pointer-events:auto;
   position:absolute; left:50%; top:calc(57.5% + clamp(38px,calc(var(--core-d) * .12),66px));
   transform:translateX(-50%);
-  font-size:12px; letter-spacing:.04em; color:rgba(224,246,240,.88);
+  font-size:12px; letter-spacing:.04em; color:rgba(236,252,247,.95);
   padding:8px 12px;
-  text-shadow:0 0 4px rgba(2,9,6,1), 0 0 10px rgba(2,9,6,1), 0 0 18px rgba(2,9,6,.95);
+  text-shadow:0 1px 3px rgba(2,9,6,.95), 0 0 9px rgba(2,9,6,.75);
   transition:color .2s;
 }
 .intro-silent:hover{color:var(--mint)}
