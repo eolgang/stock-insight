@@ -159,10 +159,11 @@ function resolveStageColors() {
 /* ---------------- HUD ---------------- */
 function buildHud() {
   const ymd = String(DOC.date || '').split('-').join('. ');
-  const wd = DOC.weekday || '';
-  $('hudDate').textContent = ymd + (wd ? ' · ' + wd + '요일' : '');
+  const wdRaw = String(DOC.weekday || '').trim();
+  const wd = wdRaw ? (wdRaw.includes('요일') ? wdRaw : wdRaw + '요일') : '';
+  $('hudDate').textContent = ymd + (wd ? ' · ' + wd : '');
   $('introNum').textContent = String(DOC.date || '').slice(5).replace('-', '.');
-  $('introSub').textContent = (DOC.weekday ? DOC.weekday + '요일 · ' : '') + '약 ' + Math.round(state.duration) + '초';
+  $('introSub').textContent = (wd ? wd + ' · ' : '') + '약 ' + Math.round(state.duration) + '초';
   $('track').setAttribute('aria-valuemax', String(Math.round(state.duration)));
 
   $('marks').innerHTML = STAGES.map((s) =>
